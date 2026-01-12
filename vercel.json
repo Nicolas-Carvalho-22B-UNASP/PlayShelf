@@ -1,0 +1,10 @@
+{
+  "redirects": [
+    {
+      "source": "/(.*)",
+      "destination": "/manutencao.html",
+      "permanent": false,
+      "statusCode": 307
+    }
+  ]
+}

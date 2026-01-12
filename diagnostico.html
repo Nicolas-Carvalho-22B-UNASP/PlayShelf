@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Diagnóstico PlayShelf</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #fff;
+        }
+        .check {
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+            background: #2a2a2a;
+        }
+        .ok { border-left: 4px solid #4caf50; }
+        .erro { border-left: 4px solid #f44336; }
+        .aviso { border-left: 4px solid #ff9800; }
+        button {
+            background: #6366f1;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background: #4f46e5; }
+        .btn-danger { background: #f44336; }
+        .btn-danger:hover { background: #d32f2f; }
+        pre {
+            background: #0a0a0a;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔍 Diagnóstico PlayShelf</h1>
+    
+    <div id="resultados"></div>
+    
+    <div style="margin-top: 30px;">
+        <h3>Ações Rápidas:</h3>
+        <button onclick="limparCache()">Limpar Cache do Service Worker</button>
+        <button onclick="limparStorage()">Limpar localStorage/sessionStorage</button>
+        <button class="btn-danger" onclick="limparTudo()">Limpar TUDO (Cache + Storage)</button>
+    </div>
+
+    <script>
+        const resultados = document.getElementById('resultados');
+        
+        function adicionarCheck(titulo, status, detalhes = '') {
+            const div = document.createElement('div');
+            div.className = `check ${status}`;
+            div.innerHTML = `
+                <strong>${titulo}</strong>
+                ${detalhes ? `<pre>${detalhes}</pre>` : ''}
+            `;
+            resultados.appendChild(div);
+        }
+
+        async function executarDiagnostico() {
+            resultados.innerHTML = '';
+
+            // 1. Verificar Service Worker
+            if ('serviceWorker' in navigator) {
+                try {
+                    const registrations = await navigator.serviceWorker.getRegistrations();
+                    if (registrations.length > 0) {
+                        adicionarCheck('✅ Service Worker', 'ok', 
+                            `Registrado: ${registrations.length} worker(s)\n` +
+                            registrations.map(r => `  - ${r.scope}`).join('\n')
+                        );
+                    } else {
+                        adicionarCheck('⚠️ Service Worker', 'aviso', 'Nenhum service worker registrado');
+                    }
+                } catch (e) {
+                    adicionarCheck('❌ Service Worker', 'erro', `Erro: ${e.message}`);
+                }
+            } else {
+                adicionarCheck('❌ Service Worker', 'erro', 'Navegador não suporta Service Workers');
+            }
+
+            // 2. Verificar localStorage
+            try {
+                const usuario = localStorage.getItem('playshelf_usuario');
+                if (usuario) {
+                    try {
+                        const parsed = JSON.parse(usuario);
+                        adicionarCheck('✅ localStorage', 'ok', 
+                            `Usuário encontrado: ${parsed.usuario || 'N/A'}\n` +
+                            `Tamanho: ${(usuario.length / 1024).toFixed(2)} KB`
+                        );
+                    } catch (e) {
+                        adicionarCheck('⚠️ localStorage', 'aviso', 
+                            'Dados encontrados mas podem estar corrompidos\n' +
+                            `Erro ao parsear: ${e.message}`
+                        );
+                    }
+                } else {
+                    adicionarCheck('ℹ️ localStorage', 'ok', 'Nenhum dado de usuário salvo (normal se não logado)');
+                }
+            } catch (e) {
+                adicionarCheck('❌ localStorage', 'erro', `Erro ao acessar: ${e.message}`);
+            }
+
+            // 3. Verificar sessionStorage
+            try {
+                const keys = Object.keys(sessionStorage);
+                if (keys.length > 0) {
+                    adicionarCheck('✅ sessionStorage', 'ok', 
+                        `Chaves encontradas: ${keys.length}\n` +
+                        keys.slice(0, 5).map(k => `  - ${k}`).join('\n') +
+                        (keys.length > 5 ? `\n  ... e mais ${keys.length - 5}` : '')
+                    );
+                } else {
+                    adicionarCheck('ℹ️ sessionStorage', 'ok', 'Nenhum dado em sessionStorage (normal)');
+                }
+            } catch (e) {
+                adicionarCheck('❌ sessionStorage', 'erro', `Erro ao acessar: ${e.message}`);
+            }
+
+            // 4. Verificar conectividade com Supabase
+            try {
+                const response = await fetch('https://hidnjnmpdajzfjmcflum.supabase.co/rest/v1/', {
+                    method: 'GET',
+                    headers: {
+                        'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhpZG5qbm1wZGFqemZqbWNmbHVtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM1MjAwMTUsImV4cCI6MjA3OTA5NjAxNX0.ZFC_0qkNkVBV2nntp-uFl8vkDtcE_a0qIzLlHksH1j8'
+                    }
+                });
+                if (response.ok || response.status === 404) {
+                    adicionarCheck('✅ Conectividade Supabase', 'ok', 'Conexão com Supabase funcionando');
+                } else {
+                    adicionarCheck('⚠️ Conectividade Supabase', 'aviso', 
+                        `Status: ${response.status} ${response.statusText}`
+                    );
+                }
+            } catch (e) {
+                adicionarCheck('❌ Conectividade Supabase', 'erro', 
+                    `Erro ao conectar: ${e.message}\n` +
+                    'Verifique sua conexão com a internet'
+                );
+            }
+
+            // 5. Verificar conectividade com RAWG API
+            try {
+                const response = await fetch('https://api.rawg.io/api/games?key=5da954bfb5a045669836b0e70cba7d58&page_size=1');
+                if (response.ok) {
+                    adicionarCheck('✅ Conectividade RAWG API', 'ok', 'Conexão com RAWG API funcionando');
+                } else {
+                    adicionarCheck('⚠️ Conectividade RAWG API', 'aviso', 
+                        `Status: ${response.status} ${response.statusText}`
+                    );
+                }
+            } catch (e) {
+                adicionarCheck('❌ Conectividade RAWG API', 'erro', 
+                    `Erro ao conectar: ${e.message}\n` +
+                    'Verifique sua conexão com a internet'
+                );
+            }
+
+            // 6. Verificar arquivos principais
+            const arquivos = ['index.html', 'script.js', 'supabase.js', 'styles.css', 'sw.js', 'manifest.webmanifest'];
+            const arquivosOk = [];
+            const arquivosErro = [];
+            
+            for (const arquivo of arquivos) {
+                try {
+                    const response = await fetch(`./${arquivo}`, { method: 'HEAD' });
+                    if (response.ok) {
+                        arquivosOk.push(arquivo);
+                    } else {
+                        arquivosErro.push(`${arquivo} (${response.status})`);
+                    }
+                } catch (e) {
+                    arquivosErro.push(`${arquivo} (erro)`);
+                }
+            }
+            
+            if (arquivosErro.length === 0) {
+                adicionarCheck('✅ Arquivos Principais', 'ok', 
+                    `Todos os ${arquivos.length} arquivos encontrados`
+                );
+            } else {
+                adicionarCheck('❌ Arquivos Principais', 'erro', 
+                    `Arquivos OK: ${arquivosOk.join(', ')}\n` +
+                    `Arquivos com problema: ${arquivosErro.join(', ')}`
+                );
+            }
+        }
+
+        async function limparCache() {
+            if ('serviceWorker' in navigator) {
+                try {
+                    const registrations = await navigator.serviceWorker.getRegistrations();
+                    for (const registration of registrations) {
+                        await registration.unregister();
+                    }
+                    
+                    const cacheNames = await caches.keys();
+                    await Promise.all(cacheNames.map(name => caches.delete(name)));
+                    
+                    alert('✅ Cache do Service Worker limpo com sucesso!\nRecarregue a página.');
+                    location.reload();
+                } catch (e) {
+                    alert('❌ Erro ao limpar cache: ' + e.message);
+                }
+            } else {
+                alert('⚠️ Service Worker não está disponível');
+            }
+        }
+
+        function limparStorage() {
+            try {
+                localStorage.clear();
+                sessionStorage.clear();
+                alert('✅ localStorage e sessionStorage limpos com sucesso!\nRecarregue a página.');
+                location.reload();
+            } catch (e) {
+                alert('❌ Erro ao limpar storage: ' + e.message);
+            }
+        }
+
+        async function limparTudo() {
+            if (!confirm('⚠️ ATENÇÃO: Isso vai limpar TODOS os dados locais (cache, storage, etc).\n\nTem certeza?')) {
+                return;
+            }
+            
+            try {
+                // Limpar Service Worker
+                if ('serviceWorker' in navigator) {
+                    const registrations = await navigator.serviceWorker.getRegistrations();
+                    for (const registration of registrations) {
+                        await registration.unregister();
+                    }
+                }
+                
+                // Limpar Cache
+                const cacheNames = await caches.keys();
+                await Promise.all(cacheNames.map(name => caches.delete(name)));
+                
+                // Limpar Storage
+                localStorage.clear();
+                sessionStorage.clear();
+                
+                alert('✅ TUDO foi limpo com sucesso!\nRecarregue a página.');
+                location.reload();
+            } catch (e) {
+                alert('❌ Erro ao limpar: ' + e.message);
+            }
+        }
+
+        // Executar diagnóstico ao carregar
+        executarDiagnostico();
+    </script>
+</body>
+</html>

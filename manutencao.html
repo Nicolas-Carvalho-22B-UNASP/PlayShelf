@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="PlayShelf está em manutenção">
+    <meta name="theme-color" content="#6366f1">
+    <title>Manutenção - PlayShelf</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%236366f1'/><circle cx='50' cy='50' r='30' fill='white'/><path d='M35 50 L45 40 L45 50 L55 50 L55 60 L45 60 L45 50 Z' fill='%236366f1'/><path d='M65 50 L55 40 L55 50 L45 50 L45 60 L55 60 L55 50 Z' fill='%236366f1'/></svg>">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --cor-fundo: #0f0f0f;
+            --cor-fundo-secundario: #1a1a1a;
+            --cor-card: #242424;
+            --cor-texto: #e0e0e0;
+            --cor-texto-secundario: #a0a0a0;
+            --cor-primaria: #6366f1;
+            --cor-primaria-hover: #4f46e5;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: var(--cor-fundo);
+            color: var(--cor-texto);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .animacao-fundo {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            opacity: 0.1;
+            overflow: hidden;
+        }
+
+        .forma-flutuante {
+            position: absolute;
+            border-radius: 50%;
+            background: var(--cor-primaria);
+            animation: flutuar 20s infinite ease-in-out;
+        }
+
+        .forma-flutuante:nth-child(1) {
+            width: 300px;
+            height: 300px;
+            top: -150px;
+            left: -150px;
+            animation-delay: 0s;
+        }
+
+        .forma-flutuante:nth-child(2) {
+            width: 200px;
+            height: 200px;
+            bottom: -100px;
+            right: -100px;
+            animation-delay: 5s;
+        }
+
+        .forma-flutuante:nth-child(3) {
+            width: 150px;
+            height: 150px;
+            top: 50%;
+            right: -75px;
+            animation-delay: 10s;
+        }
+
+        .forma-flutuante:nth-child(4) {
+            width: 250px;
+            height: 250px;
+            bottom: -125px;
+            left: 10%;
+            animation-delay: 15s;
+        }
+
+        @keyframes flutuar {
+            0%, 100% {
+                transform: translate(0, 0) rotate(0deg);
+            }
+            25% {
+                transform: translate(50px, -50px) rotate(90deg);
+            }
+            50% {
+                transform: translate(-30px, 50px) rotate(180deg);
+            }
+            75% {
+                transform: translate(30px, -30px) rotate(270deg);
+            }
+        }
+
+        .container-manutencao {
+            position: relative;
+            z-index: 1;
+            text-align: center;
+            max-width: 600px;
+            width: 100%;
+        }
+
+        .card-manutencao {
+            background: var(--cor-card);
+            border-radius: 20px;
+            padding: 60px 40px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(99, 102, 241, 0.2);
+            animation: aparecer-cima 0.8s ease-out;
+        }
+
+        @keyframes aparecer-cima {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .container-icone {
+            margin-bottom: 30px;
+            position: relative;
+        }
+
+        .envoltorio-icone {
+            display: inline-block;
+            position: relative;
+            width: 120px;
+            height: 120px;
+        }
+
+        .circulo-icone {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--cor-primaria), var(--cor-primaria-hover));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            animation: pulsar 2s ease-in-out infinite;
+        }
+
+        .circulo-icone::before {
+            content: '';
+            position: absolute;
+            width: 140px;
+            height: 140px;
+            border-radius: 50%;
+            border: 2px solid var(--cor-primaria);
+            opacity: 0.3;
+            animation: ondular 2s ease-out infinite;
+        }
+
+        @keyframes pulsar {
+            0%, 100% {
+                transform: scale(1);
+            }
+            50% {
+                transform: scale(1.05);
+            }
+        }
+
+        @keyframes ondular {
+            0% {
+                transform: scale(0.8);
+                opacity: 0.5;
+            }
+            100% {
+                transform: scale(1.2);
+                opacity: 0;
+            }
+        }
+
+        .circulo-icone i {
+            font-size: 3.5rem;
+            color: white;
+            animation: rotacionar 3s linear infinite;
+        }
+
+        @keyframes rotacionar {
+            from {
+                transform: rotate(0deg);
+            }
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .titulo-manutencao {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 20px;
+            background: linear-gradient(135deg, var(--cor-texto), var(--cor-primaria));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .subtitulo-manutencao {
+            font-size: 1.2rem;
+            color: var(--cor-texto-secundario);
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }
+
+        .mensagem-manutencao {
+            background: var(--cor-fundo-secundario);
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 30px;
+            border-left: 4px solid var(--cor-primaria);
+        }
+
+        .mensagem-manutencao p {
+            color: var(--cor-texto);
+            font-size: 1rem;
+            line-height: 1.6;
+        }
+
+        .indicador-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 24px;
+            background: var(--cor-fundo-secundario);
+            border-radius: 50px;
+            margin-top: 20px;
+            border: 1px solid rgba(99, 102, 241, 0.3);
+        }
+
+        .ponto-status {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--cor-primaria);
+            animation: piscar 1.5s ease-in-out infinite;
+        }
+
+        @keyframes piscar {
+            0%, 100% {
+                opacity: 1;
+                box-shadow: 0 0 10px var(--cor-primaria);
+            }
+            50% {
+                opacity: 0.5;
+                box-shadow: 0 0 5px var(--cor-primaria);
+            }
+        }
+
+        .texto-status {
+            color: var(--cor-texto-secundario);
+            font-size: 0.9rem;
+        }
+
+        .marca {
+            margin-bottom: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+        }
+
+        .marca i {
+            font-size: 3rem;
+            color: var(--cor-primaria);
+            animation: saltar 2s ease-in-out infinite;
+        }
+
+        @keyframes saltar {
+            0%, 100% {
+                transform: translateY(0);
+            }
+            50% {
+                transform: translateY(-10px);
+            }
+        }
+
+        .marca h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: var(--cor-texto);
+        }
+
+        @media (max-width: 768px) {
+            .card-manutencao {
+                padding: 40px 30px;
+            }
+
+            .titulo-manutencao {
+                font-size: 2rem;
+            }
+
+            .subtitulo-manutencao {
+                font-size: 1rem;
+            }
+
+            .envoltorio-icone {
+                width: 100px;
+                height: 100px;
+            }
+
+            .circulo-icone {
+                width: 100px;
+                height: 100px;
+            }
+
+            .circulo-icone i {
+                font-size: 2.5rem;
+            }
+
+            .marca h1 {
+                font-size: 2rem;
+            }
+
+            .marca i {
+                font-size: 2.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="animacao-fundo" aria-hidden="true">
+        <div class="forma-flutuante"></div>
+        <div class="forma-flutuante"></div>
+        <div class="forma-flutuante"></div>
+        <div class="forma-flutuante"></div>
+    </div>
+
+    <main class="container-manutencao">
+        <header class="marca">
+            <i class="fas fa-gamepad" aria-hidden="true"></i>
+            <h1>PlayShelf</h1>
+        </header>
+
+        <section class="card-manutencao">
+            <div class="container-icone">
+                <div class="envoltorio-icone">
+                    <div class="circulo-icone" aria-hidden="true">
+                        <i class="fas fa-tools" aria-hidden="true"></i>
+                    </div>
+                </div>
+            </div>
+
+            <h2 class="titulo-manutencao">Estamos em Manutenção</h2>
+            <p class="subtitulo-manutencao">
+                Estamos trabalhando para melhorar sua experiência. Voltaremos em breve!
+            </p>
+
+            <div class="mensagem-manutencao">
+                <p>
+                    Nossa equipe está realizando atualizações importantes no sistema. 
+                    Pedimos desculpas pelo inconveniente e agradecemos sua compreensão.
+                </p>
+            </div>
+
+            <div class="indicador-status" role="status" aria-live="polite">
+                <div class="ponto-status" aria-hidden="true"></div>
+                <span class="texto-status">Manutenção em andamento</span>
+            </div>
+        </section>
+    </main>
+</body>
+</html>

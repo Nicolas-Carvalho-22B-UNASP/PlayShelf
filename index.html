@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Organize sua biblioteca de jogos de PC">
+    <meta name="theme-color" content="#6366f1">
+    <title>PlayShelf - Sua Biblioteca de Jogos</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>🎮</text></svg>">
+    <link rel="manifest" href="manifest.webmanifest">
+    
+    <!-- Resource Hints: DNS Prefetch (leve, resolve DNS antecipadamente) -->
+    <link rel="dns-prefetch" href="https://api.rawg.io">
+    <link rel="dns-prefetch" href="https://hidnjnmpdajzfjmcflum.supabase.co">
+    <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
+    <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
+    
+    <!-- Resource Hints: Preconnect (estabelece conexão completa antecipadamente) -->
+    <link rel="preconnect" href="https://api.rawg.io" crossorigin>
+    <link rel="preconnect" href="https://hidnjnmpdajzfjmcflum.supabase.co" crossorigin>
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+    
+    <!-- Otimização de Fontes: Carregar Font Awesome de forma assíncrona não bloqueante -->
+    <link rel="preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" media="print" onload="this.media='all'">
+    <noscript><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"></noscript>
+    
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="telaAuth" class="tela-auth">
+        <div id="notificacaoAuth" class="notificacao"></div>
+        <div class="auth-container">
+            <div class="auth-logo">
+                <i class="fas fa-gamepad"></i>
+                <h1>PlayShelf</h1>
+                <p>Organize sua biblioteca de jogos</p>
+            </div>
+            
+            <div id="formLoginTela" class="auth-form ativo">
+                <h2>Entrar</h2>
+                <form id="formLoginCompleto">
+                    <div class="form-group">
+                        <label>Email</label>
+                        <input type="email" id="loginEmailTela" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Senha</label>
+                        <div class="input-password-wrapper">
+                            <input type="password" id="loginSenhaTela" required>
+                            <button type="button" class="btn-toggle-password" id="btnToggleLoginSenha" aria-label="Mostrar senha">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn-auth-tela">Entrar</button>
+                </form>
+                <p class="auth-link-tela">
+                    Não tem conta? <a href="#" id="linkCadastroTela">Cadastre-se</a>
+                </p>
+            </div>
+            
+            <div id="formCadastroTela" class="auth-form">
+                <h2>Cadastrar</h2>
+                <form id="formCadastroCompleto">
+                    <div class="form-group">
+                        <label>Usuário</label>
+                        <input type="text" id="cadastroUsuarioTela" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Email</label>
+                        <input type="email" id="cadastroEmailTela" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Senha</label>
+                        <div class="input-password-wrapper">
+                            <input type="password" id="cadastroSenhaTela" required>
+                            <button type="button" class="btn-toggle-password" id="btnToggleCadastroSenha" aria-label="Mostrar senha">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn-auth-tela">Cadastrar</button>
+                </form>
+                <p class="auth-link-tela">
+                    Já tem conta? <a href="#" id="linkLoginTela">Entre aqui</a>
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <div class="container" id="appContainer" style="display: none;">
+        <header>
+            <div class="header-content">
+                <div class="header-left">
+                    <button id="btnMenuMobile" class="btn-menu-mobile">
+                        <i class="fas fa-bars"></i>
+                    </button>
+                    <h1><i class="fas fa-gamepad"></i> PlayShelf</h1>
+                </div>
+                <div class="header-actions">
+                    <button id="btnAtualizacoes" class="btn-header btn-atualizacoes">
+                        <i class="fas fa-clipboard-list"></i>
+                        <span id="badgeNovaAtualizacao" class="badge-nova-atualizacao" style="display: none;"></span>
+                    </button>
+                    <button id="btnNotificacoes" class="btn-header btn-notificacoes">
+                        <i class="fas fa-bell"></i>
+                        <span id="badgeNotificacoes" class="badge-notificacoes" style="display: none;"></span>
+                    </button>
+                    <button id="btnEstatisticas" class="btn-header btn-estatisticas">
+                        <i class="fas fa-chart-bar"></i> Estatísticas
+                    </button>
+                    <div class="area-usuario">
+                        <div class="usuario-badge" id="usuarioBadge" style="cursor: pointer;">
+                            <i class="fas fa-user-circle"></i>
+                            <span id="nomeUsuario"></span>
+                        </div>
+                        <button id="btnAmigos" class="btn-header btn-amigos">
+                            <i class="fas fa-user-friends"></i> Amigos
+                            <span id="badgeSolicitacoes" class="badge-notificacoes" style="display: none;"></span>
+                        </button>
+                        <button id="btnLogout" class="btn-header">Sair</button>
+                    </div>
+                </div>
+            </div>
+        </header>
+        
+        <div id="notificacao" class="notificacao"></div>
+
+        <main>
+            <section class="busca-secao">
+                <div class="busca-header">
+                    <button id="btnVoltar" class="btn-voltar" style="display: none;" aria-label="Voltar para minha lista">
+                        <i class="fas fa-arrow-left"></i> Voltar para Minha Lista
+                    </button>
+                </div>
+                <div class="busca-container">
+                    <input 
+                        type="text" 
+                        id="campoBusca" 
+                        placeholder="Buscar jogos..."
+                        autocomplete="off"
+                    >
+                    <button id="btnBuscar" aria-label="Buscar jogos">
+                        <i class="fas fa-search"></i>
+                    </button>
+                </div>
+                <div id="resultadosBusca" class="resultados"></div>
+                <button id="btnCarregarMais" class="btn-carregar-mais" style="display: none;">
+                    Carregar Mais Jogos
+                </button>
+            </section>
+
+            <section class="lista-secao">
+                <div class="lista-header">
+                    <div class="lista-header-titulo">
+                        <button id="btnVoltarMinhaLista" class="btn-voltar-minha-lista" style="display: none;" aria-label="Voltar para minha lista">
+                            <i class="fas fa-arrow-left"></i>
+                        </button>
+                        <h2 id="tituloLista">Minha Lista</h2>
+                    </div>
+                    <div class="busca-lista-container">
+                        <input 
+                            type="text" 
+                            id="campoBuscaLista" 
+                            placeholder="Buscar na sua lista..."
+                            autocomplete="off"
+                        >
+                        <i class="fas fa-search"></i>
+                    </div>
+                    <div class="filtros">
+                        <button class="filtro-btn ativo" data-filtro="todos">
+                            Todos <span class="contador" id="contador-todos">0</span>
+                        </button>
+                        <button class="filtro-btn" data-filtro="quero-jogar">
+                            Quero Jogar <span class="contador" id="contador-quero-jogar">0</span>
+                        </button>
+                        <button class="filtro-btn" data-filtro="jogando">
+                            Jogando <span class="contador" id="contador-jogando">0</span>
+                        </button>
+                        <button class="filtro-btn" data-filtro="zerado">
+                            Zerado <span class="contador" id="contador-zerado">0</span>
+                        </button>
+                        <button class="filtro-btn" data-filtro="dropado">
+                            Dropado <span class="contador" id="contador-dropado">0</span>
+                        </button>
+                    </div>
+                </div>
+                <div id="minhaLista" class="lista-jogos"></div>
+            </section>
+        </main>
+    </div>
+
+    <div id="menuLateralMobile" class="menu-lateral-mobile">
+        <div class="menu-lateral-overlay"></div>
+        <div class="menu-lateral-conteudo">
+            <div class="menu-lateral-header">
+                <h2><i class="fas fa-gamepad"></i> Menu</h2>
+                <button id="btnFecharMenuMobile" class="btn-fechar-menu-mobile" aria-label="Fechar menu lateral">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="menu-lateral-body">
+                <button class="menu-item-mobile" id="menuItemAtualizacoes">
+                    <i class="fas fa-clipboard-list"></i>
+                    <span>Atualizações</span>
+                    <span id="badgeNovaAtualizacaoMenu" class="badge-nova-atualizacao-menu" style="display: none;"></span>
+                </button>
+                <button class="menu-item-mobile" id="menuItemNotificacoes">
+                    <i class="fas fa-bell"></i>
+                    <span>Notificações</span>
+                    <span id="badgeNotificacoesMenu" class="badge-notificacoes-menu" style="display: none;"></span>
+                </button>
+                <button class="menu-item-mobile" id="menuItemAmigos">
+                    <i class="fas fa-user-friends"></i>
+                    <span>Amigos</span>
+                    <span id="badgeSolicitacoesMenu" class="badge-notificacoes-menu" style="display: none;"></span>
+                </button>
+                <button class="menu-item-mobile" id="menuItemEstatisticas">
+                    <i class="fas fa-chart-bar"></i>
+                    <span>Estatísticas</span>
+                </button>
+                <div class="menu-item-mobile usuario-menu-item" id="menuItemUsuario" style="cursor: pointer;">
+                    <div class="menu-usuario-foto-container">
+                        <i class="fas fa-user-circle" id="menuUsuarioIcone"></i>
+                        <img id="menuUsuarioFoto" src="" alt="Foto de perfil" style="display: none;">
+                    </div>
+                    <span id="nomeUsuarioMenu"></span>
+                </div>
+                <button class="menu-item-mobile menu-item-logout" id="menuItemLogout">
+                    <i class="fas fa-sign-out-alt"></i>
+                    <span>Sair</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="telaAvaliacao" class="tela-avaliacao" style="display: none;">
+        <div class="avaliacao-container">
+            <button class="btn-voltar-avaliacao" aria-label="Voltar para lista de jogos"><i class="fas fa-arrow-left"></i> Voltar</button>
+            
+            <div class="avaliacao-header">
+                <img id="capaJogoModal" src="" alt="Capa do jogo">
+                <div class="avaliacao-info">
+                    <h2 id="nomeJogoModal"></h2>
+                    <p id="lancamentoJogoModal"></p>
+                </div>
+            </div>
+            
+            <div class="avaliacao-body">
+                <div class="form-group-avaliacao">
+                    <label>Status:</label>
+                    <select id="selectStatus">
+                        <option value="quero-jogar">🎮 Quero Jogar</option>
+                        <option value="jogando">⚡ Jogando</option>
+                        <option value="zerado">✅ Zerado</option>
+                        <option value="dropado">❌ Dropado</option>
+                    </select>
+                </div>
+                
+                <div class="form-group-avaliacao">
+                    <label>Sua Avaliação:</label>
+                    <div class="avaliacao-estrelas">
+                        <i class="fas fa-star estrela" data-valor="1"></i>
+                        <i class="fas fa-star estrela" data-valor="2"></i>
+                        <i class="fas fa-star estrela" data-valor="3"></i>
+                        <i class="fas fa-star estrela" data-valor="4"></i>
+                        <i class="fas fa-star estrela" data-valor="5"></i>
+                    </div>
+                    <p class="avaliacao-texto">Sem avaliação</p>
+                </div>
+                
+                <div class="form-group-avaliacao">
+                    <label>Comentário (opcional):</label>
+                    <textarea id="comentarioAvaliacao" placeholder="Escreva sua opinião sobre o jogo..." maxlength="500"></textarea>
+                    <p class="contador-caracteres"><span id="contadorComentario">0</span>/500</p>
+                </div>
+            </div>
+            
+            <div class="avaliacao-botoes">
+                <button id="btnConfirmar" class="btn-confirmar-avaliacao">Salvar</button>
+                <button id="btnCancelar" class="btn-cancelar-avaliacao">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="telaDetalhes" class="tela-detalhes" style="display: none;">
+        <div class="detalhes-container">
+            <button class="btn-voltar-detalhes" aria-label="Voltar para lista de jogos"><i class="fas fa-arrow-left"></i> Voltar</button>
+            <div class="detalhes-header">
+                <img id="capaDetalhes" src="" alt="Capa do jogo">
+            </div>
+            <div class="detalhes-body">
+                <h2 id="nomeDetalhes"></h2>
+                <div class="detalhes-info">
+                    <div class="info-item">
+                        <span class="info-label">Lançamento:</span>
+                        <span id="lancamentoDetalhes"></span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Plataformas:</span>
+                        <span id="plataformasDetalhes"></span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Gêneros:</span>
+                        <span id="generosDetalhes"></span>
+                    </div>
+                    <div class="info-item" id="playtimeContainer" style="display: none;">
+                        <span class="info-label">Tempo de Jogo:</span>
+                        <span id="playtimeDetalhes"></span>
+                    </div>
+                    <div class="info-item" id="classificacaoContainer" style="display: none;">
+                        <span class="info-label">Classificação:</span>
+                        <span id="classificacaoDetalhes"></span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Desenvolvedora:</span>
+                        <span id="desenvolvedoraDetalhes"></span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Metascore:</span>
+                        <span id="metacriticDetalhes"></span>
+                    </div>
+                </div>
+                <div class="detalhes-descricao">
+                    <h3>Sobre o jogo</h3>
+                    <p id="descricaoDetalhes"></p>
+                    <div id="dlcsSecao" class="dlcs-secao" style="display: none;">
+                        <h4>Conteúdo Adicional</h4>
+                        <div id="dlcsLista" class="dlcs-lista"></div>
+                    </div>
+                </div>
+                
+                <div id="jogosRelacionadosSecao" class="jogos-relacionados-secao">
+                    <div class="cards-container">
+                        <div class="card-relacionado">
+                            <h4><i class="fas fa-layer-group"></i> Jogos da Série</h4>
+                            <div id="jogosSerie" class="card-scrollavel">
+                                <p class="sem-informacao">Carregando...</p>
+                            </div>
+                        </div>
+                        <div class="card-relacionado">
+                            <h4><i class="fas fa-building"></i> Mesma Desenvolvedora / Distribuidora</h4>
+                            <div id="jogosDesenvolvedora" class="card-scrollavel">
+                                <p class="sem-informacao">Carregando...</p>
+                            </div>
+                        </div>
+                        <div class="card-relacionado">
+                            <h4><i class="fas fa-trophy"></i> Conquistas</h4>
+                            <div id="conquistasJogo" class="card-scrollavel">
+                                <p class="sem-informacao">Carregando...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="trailersSecao" class="trailers-secao" style="display: none;">
+                    <h3><i class="fas fa-play-circle"></i> Trailers e Vídeos</h3>
+                    <div id="listaTrailers" class="lista-trailers"></div>
+                </div>
+                
+                <div id="requisitosHardwareSecao" class="requisitos-hardware-secao" style="display: none;">
+                    <h3><i class="fas fa-microchip"></i> Requisitos de Hardware (PC)</h3>
+                    <div id="requisitosHardwareConteudo" class="requisitos-hardware-conteudo"></div>
+                </div>
+                
+                <div id="screenshotsSecao" class="screenshots-secao" style="display: none;">
+                    <h3><i class="fas fa-images"></i> Capturas de Tela</h3>
+                    <div id="listaScreenshots" class="lista-screenshots"></div>
+                </div>
+                
+                <div id="fotosJogoSecao" class="fotos-jogo-secao">
+                    <div class="fotos-jogo-header">
+                        <h3><i class="fas fa-camera"></i> Fotos da Comunidade</h3>
+                        <button id="btnPostarFoto" class="btn-postar-foto" style="display: none;">
+                            <i class="fas fa-plus"></i> Postar Foto
+                        </button>
+                    </div>
+                    <div id="listaFotosJogo" class="lista-fotos-jogo">
+                        <p class="sem-informacao">Carregando fotos...</p>
+                    </div>
+                </div>
+                
+                <div id="amigosComJogo" class="amigos-com-jogo-secao" style="display: none;">
+                    <h3><i class="fas fa-user-friends"></i> Amigos que possuem</h3>
+                    <div id="listaAmigosComJogo" class="lista-amigos-com-jogo"></div>
+                </div>
+                
+                <div class="avaliacoes-secao">
+                    <h3>Avaliações da Comunidade</h3>
+                    <div id="listaAvaliacoes" class="lista-avaliacoes"></div>
+                </div>
+                
+                <div id="areaAcaoDetalhes" class="detalhes-acao"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="modalConfirmacao" class="modal">
+        <div class="modal-conteudo modal-confirmacao">
+            <div class="confirmacao-icone">
+                <i class="fas fa-exclamation-triangle"></i>
+            </div>
+            <h3 id="tituloConfirmacao">Confirmar ação</h3>
+            <p id="mensagemConfirmacao">Tem certeza que deseja continuar?</p>
+            <div class="confirmacao-botoes">
+                <button id="btnConfirmarAcao" class="btn-confirmar-acao">Confirmar</button>
+                <button id="btnCancelarAcao" class="btn-cancelar-acao">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modalAtualizacoes" class="modal">
+        <div class="modal-conteudo modal-atualizacoes">
+            <button class="btn-fechar-modal" id="btnFecharAtualizacoes" aria-label="Fechar modal de atualizações"><i class="fas fa-times"></i></button>
+            <h2><i class="fas fa-rocket"></i> Atualizações</h2>
+            <div id="listaAtualizacoes" class="lista-atualizacoes"></div>
+        </div>
+    </div>
+
+    <div id="modalNotificacoes" class="modal">
+        <div class="modal-conteudo modal-notificacoes">
+            <button class="btn-fechar-modal" id="btnFecharNotificacoes" aria-label="Fechar modal de notificações"><i class="fas fa-times"></i></button>
+            <div class="notificacoes-header">
+                <h2><i class="fas fa-bell"></i> Notificações</h2>
+                <button id="btnMarcarTodasLidas" class="btn-marcar-lidas">
+                    <i class="fas fa-check-double"></i> Marcar todas como lidas
+                </button>
+            </div>
+            <div id="listaNotificacoes" class="lista-notificacoes"></div>
+        </div>
+    </div>
+
+    <div id="modalEstatisticas" class="modal">
+        <div class="modal-conteudo modal-estatisticas">
+            <button class="btn-fechar-modal" id="btnFecharEstatisticas" aria-label="Fechar modal de estatísticas"><i class="fas fa-times"></i></button>
+            <h2><i class="fas fa-chart-bar"></i> Dashboard de Estatísticas</h2>
+            <div class="estatisticas-tabs">
+                <button class="estatisticas-tab ativo" data-tab="pessoais">
+                    <i class="fas fa-user"></i> Minhas Estatísticas
+                </button>
+                <button class="estatisticas-tab" data-tab="comparacao">
+                    <i class="fas fa-users"></i> Comparar com Amigos
+                </button>
+            </div>
+            <div id="conteudoEstatisticas" class="conteudo-estatisticas"></div>
+            <div id="conteudoComparacao" class="conteudo-comparacao" style="display: none;"></div>
+        </div>
+    </div>
+
+    <div id="modalFotoPerfil" class="modal">
+        <div class="modal-conteudo modal-foto-perfil">
+            <button class="btn-fechar-modal" id="btnFecharFotoPerfil" aria-label="Fechar modal de foto de perfil"><i class="fas fa-times"></i></button>
+            <h2><i class="fas fa-user-circle"></i> Foto de Perfil</h2>
+            
+            <div class="foto-perfil-preview">
+                <img id="fotoPerfilPreview" src="" alt="Foto de perfil" style="display: none;">
+                <div id="fotoPerfilPlaceholder" class="foto-perfil-placeholder">
+                    <i class="fas fa-user-circle"></i>
+                </div>
+            </div>
+            
+            <div class="foto-perfil-acoes">
+                <label for="inputFotoPerfil" class="btn-upload-foto">
+                    <i class="fas fa-upload"></i> Escolher Foto
+                </label>
+                <input type="file" id="inputFotoPerfil" accept="image/*" style="display: none;">
+                
+                <button id="btnRemoverFoto" class="btn-remover-foto" style="display: none;">
+                    <i class="fas fa-trash"></i> Remover Foto
+                </button>
+            </div>
+            
+            <p class="foto-perfil-info">Formatos aceitos: JPG, PNG, GIF (máx. 2MB)</p>
+        </div>
+    </div>
+
+    <div id="modalFotoJogo" class="modal">
+        <div class="modal-conteudo modal-foto-jogo">
+            <button class="btn-fechar-modal" id="btnFecharFotoJogo" aria-label="Fechar modal de foto"><i class="fas fa-times"></i></button>
+            <h2><i class="fas fa-camera"></i> Postar Foto do Jogo</h2>
+            
+            <div class="foto-jogo-preview-container">
+                <div id="fotosJogoPreviewLista" class="fotos-jogo-preview-lista" style="display: none;"></div>
+                <div id="fotoJogoPreview" class="foto-jogo-preview" style="display: none;">
+                    <img id="fotoJogoPreviewImg" src="" alt="Preview da foto">
+                </div>
+                <div id="fotoJogoPlaceholder" class="foto-jogo-placeholder">
+                    <i class="fas fa-image"></i>
+                    <p>Nenhuma imagem selecionada</p>
+                </div>
+            </div>
+            
+            <div class="form-group-foto">
+                <label for="inputFotoJogo" class="btn-upload-foto-jogo">
+                    <i class="fas fa-upload"></i> Escolher Foto(s)
+                </label>
+                <input type="file" id="inputFotoJogo" accept="image/*" multiple style="display: none;">
+            </div>
+            
+            <div class="form-group-foto">
+                <label for="descricaoFotoJogo">Descrição (opcional):</label>
+                <textarea id="descricaoFotoJogo" placeholder="Descreva sua(s) foto(s)..." maxlength="200"></textarea>
+                <p class="contador-caracteres"><span id="contadorDescricaoFoto">0</span>/200</p>
+            </div>
+            
+            <div class="foto-jogo-botoes">
+                <button id="btnConfirmarFotoJogo" class="btn-confirmar-foto-jogo" disabled>
+                    <i class="fas fa-check"></i> Postar
+                </button>
+                <button id="btnCancelarFotoJogo" class="btn-cancelar-foto-jogo">
+                    Cancelar
+                </button>
+            </div>
+            
+            <p class="foto-jogo-info">Formatos aceitos: JPG, PNG, GIF (máx. 5MB por foto, até 5 fotos)</p>
+        </div>
+    </div>
+
+    <div id="modalAmigos" class="modal">
+        <div class="modal-conteudo modal-amigos">
+            <button class="btn-fechar-modal" id="btnFecharAmigos" aria-label="Fechar modal de amigos"><i class="fas fa-times"></i></button>
+            <h2>Amigos</h2>
+            
+            <div class="amigos-tabs">
+                <button class="tab-amigos ativo" data-tab="lista">Meus Amigos</button>
+                <button class="tab-amigos" data-tab="estatisticas"><i class="fas fa-chart-line"></i> Compatibilidade</button>
+                <button class="tab-amigos" data-tab="adicionar">Adicionar</button>
+                <button class="tab-amigos" data-tab="solicitacoes">Solicitações <span id="contadorSolicitacoes" class="contador-badge"></span></button>
+            </div>
+            
+            <div id="tabLista" class="tab-content ativo">
+                <div id="listaAmigos" class="lista-amigos-container"></div>
+            </div>
+            
+            <div id="tabAdicionar" class="tab-content">
+                <div class="form-adicionar-amigo">
+                    <input type="text" id="inputNickAmigo" placeholder="Digite o nick do usuário..." />
+                    <button id="btnEnviarSolicitacao">Enviar Solicitação</button>
+                </div>
+            </div>
+            
+            <div id="tabSolicitacoes" class="tab-content">
+                <div id="listaSolicitacoes" class="lista-solicitacoes-container"></div>
+            </div>
+            
+            <div id="tabEstatisticas" class="tab-content">
+                <div id="listaEstatisticas" class="lista-estatisticas-container"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="modalScreenshot" class="modal-screenshot">
+        <div class="modal-screenshot-conteudo">
+            <button class="btn-fechar-screenshot" aria-label="Fechar visualização de screenshot"><i class="fas fa-times"></i></button>
+            <button class="screenshot-navegacao anterior" aria-label="Screenshot anterior"><i class="fas fa-chevron-left"></i></button>
+            <img id="screenshotAmpliada" src="" alt="Screenshot ampliado">
+            <button class="screenshot-navegacao proxima" aria-label="Próximo screenshot"><i class="fas fa-chevron-right"></i></button>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js"></script>
+    <script src="supabase.js" defer></script>
+    <script src="script.js" defer></script>
+</body>
+</html>
