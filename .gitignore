@@ -1,26 +1,20 @@
-# Arquivos de configuração local
+# Sistema Operacional
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
 Thumbs.db
+ehthumbs.db
 desktop.ini
+$RECYCLE.BIN/
 
-# Logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# Arquivos temporários
-*.tmp
-*.temp
-*.swp
-*.swo
-*~
-
-# IDEs
+# IDEs e Editores
 .vscode/
 .idea/
 *.sublime-project
 *.sublime-workspace
+*.code-workspace
 
 # Python
 __pycache__/
@@ -31,40 +25,73 @@ __pycache__/
 venv/
 env/
 ENV/
+env.bak/
+venv.bak/
 .venv
+*.egg-info/
+dist/
+*.egg
 
-# Node modules (caso adicione no futuro)
+# Node.js (caso use no futuro)
 node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 package-lock.json
 yarn.lock
+pnpm-lock.yaml
+.pnpm-store/
 
-# Arquivos de ambiente
+# Arquivos de Ambiente e Configuração Sensível
 .env
 .env.local
 .env.*.local
+.env.production
+.env.development
+*.key
+*.pem
+*.cert
 
-# Arquivos de build/dist
+# Build e Distribuição
 dist/
 build/
+out/
+.next/
+.vercel/
 *.min.js
 *.min.css
+*.min.map
 
-# Arquivos de cache
+# Cache e Arquivos Temporários
 .cache/
 .parcel-cache/
-.next/
-out/
-
-# Arquivos de sistema operacional
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-
-# Arquivos de backup
+.turbo/
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
 *.bak
 *.backup
-*~
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Testes e Cobertura
+coverage/
+.nyc_output/
+*.lcov
+.jest/
+
+# Arquivos do Supabase (configurações locais)
+.supabase/
+
+# Arquivos de Backup e Desabilitados
+*.disabled
+*.old
+*.orig

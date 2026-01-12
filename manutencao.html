@@ -33,9 +33,11 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 20px;
-            overflow: hidden;
+            padding: 16px;
+            overflow-x: hidden;
+            overflow-y: auto;
             position: relative;
+            -webkit-overflow-scrolling: touch;
         }
 
         .animacao-fundo {
@@ -88,6 +90,36 @@
             animation-delay: 15s;
         }
 
+        @media (max-width: 480px) {
+            .forma-flutuante:nth-child(1) {
+                width: 150px;
+                height: 150px;
+                top: -75px;
+                left: -75px;
+            }
+
+            .forma-flutuante:nth-child(2) {
+                width: 100px;
+                height: 100px;
+                bottom: -50px;
+                right: -50px;
+            }
+
+            .forma-flutuante:nth-child(3) {
+                width: 80px;
+                height: 80px;
+                top: 50%;
+                right: -40px;
+            }
+
+            .forma-flutuante:nth-child(4) {
+                width: 120px;
+                height: 120px;
+                bottom: -60px;
+                left: 10%;
+            }
+        }
+
         @keyframes flutuar {
             0%, 100% {
                 transform: translate(0, 0) rotate(0deg);
@@ -109,6 +141,7 @@
             text-align: center;
             max-width: 600px;
             width: 100%;
+            margin: 0 auto;
         }
 
         .card-manutencao {
@@ -118,6 +151,7 @@
             box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
             border: 1px solid rgba(99, 102, 241, 0.2);
             animation: aparecer-cima 0.8s ease-out;
+            width: 100%;
         }
 
         @keyframes aparecer-cima {
@@ -164,6 +198,10 @@
             border: 2px solid var(--cor-primaria);
             opacity: 0.3;
             animation: ondular 2s ease-out infinite;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            transform-origin: center;
         }
 
         @keyframes pulsar {
@@ -177,11 +215,11 @@
 
         @keyframes ondular {
             0% {
-                transform: scale(0.8);
+                transform: translate(-50%, -50%) scale(0.8);
                 opacity: 0.5;
             }
             100% {
-                transform: scale(1.2);
+                transform: translate(-50%, -50%) scale(1.2);
                 opacity: 0;
             }
         }
@@ -189,33 +227,37 @@
         .circulo-icone i {
             font-size: 3.5rem;
             color: white;
-            animation: rotacionar 3s linear infinite;
-        }
-
-        @keyframes rotacionar {
-            from {
-                transform: rotate(0deg);
-            }
-            to {
-                transform: rotate(360deg);
-            }
+            transform: rotate(-15deg);
         }
 
         .titulo-manutencao {
             font-size: 2.5rem;
             font-weight: 700;
             margin-bottom: 20px;
-            background: linear-gradient(135deg, var(--cor-texto), var(--cor-primaria));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+            color: var(--cor-texto);
         }
 
         .subtitulo-manutencao {
             font-size: 1.2rem;
             color: var(--cor-texto-secundario);
-            margin-bottom: 30px;
+            margin-bottom: 15px;
             line-height: 1.6;
+        }
+
+        .previsao-volta {
+            font-size: 1rem;
+            color: var(--cor-primaria);
+            margin-bottom: 30px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .previsao-volta i {
+            font-size: 0.9rem;
         }
 
         .mensagem-manutencao {
@@ -224,6 +266,7 @@
             padding: 25px;
             margin-bottom: 30px;
             border-left: 4px solid var(--cor-primaria);
+            text-align: left;
         }
 
         .mensagem-manutencao p {
@@ -296,17 +339,30 @@
             color: var(--cor-texto);
         }
 
+        @media (max-width: 1024px) {
+            .card-manutencao {
+                padding: 50px 35px;
+            }
+        }
+
         @media (max-width: 768px) {
+            body {
+                padding: 12px;
+            }
+
             .card-manutencao {
                 padding: 40px 30px;
+                border-radius: 16px;
             }
 
             .titulo-manutencao {
                 font-size: 2rem;
+                margin-bottom: 16px;
             }
 
             .subtitulo-manutencao {
                 font-size: 1rem;
+                margin-bottom: 12px;
             }
 
             .envoltorio-icone {
@@ -319,8 +375,18 @@
                 height: 100px;
             }
 
+            .circulo-icone::before {
+                width: 120px;
+                height: 120px;
+            }
+
             .circulo-icone i {
                 font-size: 2.5rem;
+            }
+
+            .marca {
+                margin-bottom: 30px;
+                gap: 12px;
             }
 
             .marca h1 {
@@ -329,6 +395,182 @@
 
             .marca i {
                 font-size: 2.5rem;
+            }
+
+            .previsao-volta {
+                font-size: 0.9rem;
+                margin-bottom: 24px;
+            }
+
+            .mensagem-manutencao {
+                padding: 20px;
+                margin-bottom: 24px;
+            }
+
+            .mensagem-manutencao p {
+                font-size: 0.95rem;
+            }
+
+            .indicador-status {
+                padding: 10px 20px;
+                margin-top: 16px;
+            }
+
+            .texto-status {
+                font-size: 0.85rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            body {
+                padding: 10px;
+            }
+
+            .card-manutencao {
+                padding: 30px 20px;
+                border-radius: 16px;
+            }
+
+            .titulo-manutencao {
+                font-size: 1.75rem;
+                margin-bottom: 12px;
+            }
+
+            .subtitulo-manutencao {
+                font-size: 0.95rem;
+                margin-bottom: 10px;
+                line-height: 1.5;
+            }
+
+            .envoltorio-icone {
+                width: 80px;
+                height: 80px;
+            }
+
+            .circulo-icone {
+                width: 80px;
+                height: 80px;
+            }
+
+            .circulo-icone::before {
+                width: 100px;
+                height: 100px;
+            }
+
+            .circulo-icone i {
+                font-size: 2rem;
+            }
+
+            .marca {
+                margin-bottom: 24px;
+                gap: 10px;
+            }
+
+            .marca h1 {
+                font-size: 1.75rem;
+            }
+
+            .marca i {
+                font-size: 2rem;
+            }
+
+            .previsao-volta {
+                font-size: 0.85rem;
+                margin-bottom: 20px;
+                gap: 6px;
+            }
+
+            .previsao-volta span {
+                text-align: center;
+            }
+
+            .mensagem-manutencao {
+                padding: 16px;
+                margin-bottom: 20px;
+                border-radius: 10px;
+            }
+
+            .mensagem-manutencao p {
+                font-size: 0.9rem;
+                line-height: 1.5;
+            }
+
+            .indicador-status {
+                padding: 8px 16px;
+                margin-top: 12px;
+                gap: 8px;
+            }
+
+            .ponto-status {
+                width: 10px;
+                height: 10px;
+            }
+
+            .texto-status {
+                font-size: 0.8rem;
+            }
+        }
+
+        @media (max-width: 360px) {
+            .card-manutencao {
+                padding: 24px 16px;
+            }
+
+            .titulo-manutencao {
+                font-size: 1.5rem;
+            }
+
+            .subtitulo-manutencao {
+                font-size: 0.9rem;
+            }
+
+            .marca h1 {
+                font-size: 1.5rem;
+            }
+
+            .marca i {
+                font-size: 1.75rem;
+            }
+
+            .envoltorio-icone {
+                width: 70px;
+                height: 70px;
+            }
+
+            .circulo-icone {
+                width: 70px;
+                height: 70px;
+            }
+
+            .circulo-icone::before {
+                width: 90px;
+                height: 90px;
+            }
+
+            .circulo-icone i {
+                font-size: 1.75rem;
+            }
+        }
+
+        @media (orientation: landscape) and (max-height: 600px) {
+            body {
+                padding: 10px;
+            }
+
+            .card-manutencao {
+                padding: 30px 40px;
+            }
+
+            .marca {
+                margin-bottom: 20px;
+            }
+
+            .container-icone {
+                margin-bottom: 20px;
+            }
+
+            .mensagem-manutencao {
+                margin-bottom: 20px;
             }
         }
     </style>
@@ -360,6 +602,10 @@
             <p class="subtitulo-manutencao">
                 Estamos trabalhando para melhorar sua experiência. Voltaremos em breve!
             </p>
+            <div class="previsao-volta">
+                <i class="fas fa-calendar-alt" aria-hidden="true"></i>
+                <span>Previsão de volta: 19 de janeiro de 2026</span>
+            </div>
 
             <div class="mensagem-manutencao">
                 <p>
