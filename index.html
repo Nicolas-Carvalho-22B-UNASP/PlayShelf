@@ -14,12 +14,18 @@
     <link rel="dns-prefetch" href="https://hidnjnmpdajzfjmcflum.supabase.co">
     <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
     <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
+    <link rel="dns-prefetch" href="https://api.steampowered.com">
+    <link rel="dns-prefetch" href="https://steamcommunity.com">
+    <link rel="dns-prefetch" href="https://cdn.cloudflare.steamstatic.com">
     
     <!-- Resource Hints: Preconnect (estabelece conexão completa antecipadamente) -->
     <link rel="preconnect" href="https://api.rawg.io" crossorigin>
     <link rel="preconnect" href="https://hidnjnmpdajzfjmcflum.supabase.co" crossorigin>
     <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+    <link rel="preconnect" href="https://api.steampowered.com" crossorigin>
+    <link rel="preconnect" href="https://steamcommunity.com" crossorigin>
+    <link rel="preconnect" href="https://cdn.cloudflare.steamstatic.com" crossorigin>
     
     <!-- Otimização de Fontes: Carregar Font Awesome de forma assíncrona não bloqueante -->
     <link rel="preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
@@ -100,23 +106,23 @@
                     <h1><i class="fas fa-gamepad"></i> PlayShelf</h1>
                 </div>
                 <div class="header-actions">
-                    <button id="btnAtualizacoes" class="btn-header btn-atualizacoes">
+                    <button id="btnAtualizacoes" class="btn-header btn-atualizacoes" data-tooltip="Veja o <span class='tooltip-destaque'>histórico de atualizações</span> e novidades do PlayShelf.">
                         <i class="fas fa-clipboard-list"></i>
                         <span id="badgeNovaAtualizacao" class="badge-nova-atualizacao" style="display: none;"></span>
                     </button>
-                    <button id="btnNotificacoes" class="btn-header btn-notificacoes">
+                    <button id="btnNotificacoes" class="btn-header btn-notificacoes" data-tooltip="Respostas em suas avaliações. Toque em uma notificação para ir ao jogo.">
                         <i class="fas fa-bell"></i>
                         <span id="badgeNotificacoes" class="badge-notificacoes" style="display: none;"></span>
                     </button>
-                    <button id="btnEstatisticas" class="btn-header btn-estatisticas">
+                    <button id="btnEstatisticas" class="btn-header btn-estatisticas" data-tooltip="Métricas da sua biblioteca: totais, zerados, gêneros e <span class='tooltip-destaque'>histórico mensal</span>.">
                         <i class="fas fa-chart-bar"></i> Estatísticas
                     </button>
                     <div class="area-usuario">
-                        <div class="usuario-badge" id="usuarioBadge" style="cursor: pointer;">
+                        <div class="usuario-badge" id="usuarioBadge" style="cursor: pointer;" data-tooltip="Clique para alterar sua <span class='tooltip-destaque'>foto de perfil</span>.">
                             <i class="fas fa-user-circle"></i>
                             <span id="nomeUsuario"></span>
                         </div>
-                        <button id="btnAmigos" class="btn-header btn-amigos">
+                        <button id="btnAmigos" class="btn-header btn-amigos" data-tooltip="Adicione amigos, veja as listas deles e <span class='tooltip-destaque'>compare compatibilidade</span> de jogos.">
                             <i class="fas fa-user-friends"></i> Amigos
                             <span id="badgeSolicitacoes" class="badge-notificacoes" style="display: none;"></span>
                         </button>
@@ -142,8 +148,12 @@
                         placeholder="Buscar jogos..."
                         autocomplete="off"
                     >
-                    <button id="btnBuscar" aria-label="Buscar jogos">
+                    <button id="btnBuscar" aria-label="Buscar jogos" data-tooltip="Busca na base <span class='tooltip-destaque'>RAWG</span>. Digite o nome e clique ou Enter.">
                         <i class="fas fa-search"></i>
+                    </button>
+                    <button id="btnSteam" class="btn-steam" aria-label="Integração Steam" data-tooltip="Conecte sua conta <span class='tooltip-destaque'>Steam</span> e veja sua biblioteca aqui.">
+                        <img src="https://store.steampowered.com/favicon.ico" alt="" width="18" height="18">
+                        <span>Steam</span>
                     </button>
                 </div>
                 <div id="resultadosBusca" class="resultados"></div>
@@ -160,7 +170,7 @@
                         </button>
                         <h2 id="tituloLista">Minha Lista</h2>
                     </div>
-                    <div class="busca-lista-container">
+                    <div class="busca-lista-container" data-tooltip="Filtra os jogos da sua lista pelo <span class='tooltip-destaque'>nome</span>.">
                         <input 
                             type="text" 
                             id="campoBuscaLista" 
@@ -170,19 +180,19 @@
                         <i class="fas fa-search"></i>
                     </div>
                     <div class="filtros">
-                        <button class="filtro-btn ativo" data-filtro="todos">
+                        <button class="filtro-btn ativo" data-filtro="todos" data-tooltip="Exibe <span class='tooltip-destaque'>todos</span> os jogos da sua lista, em qualquer status.">
                             Todos <span class="contador" id="contador-todos">0</span>
                         </button>
-                        <button class="filtro-btn" data-filtro="quero-jogar">
+                        <button class="filtro-btn" data-filtro="quero-jogar" data-tooltip="Jogos que você <span class='tooltip-destaque'>quer jogar</span> um dia. Sua wishlist.">
                             Quero Jogar <span class="contador" id="contador-quero-jogar">0</span>
                         </button>
-                        <button class="filtro-btn" data-filtro="jogando">
+                        <button class="filtro-btn" data-filtro="jogando" data-tooltip="Jogos que você está <span class='tooltip-destaque-positivo'>jogando agora</span>.">
                             Jogando <span class="contador" id="contador-jogando">0</span>
                         </button>
-                        <button class="filtro-btn" data-filtro="zerado">
+                        <button class="filtro-btn" data-filtro="zerado" data-tooltip="Jogos que você <span class='tooltip-destaque-positivo'>terminou</span> (concluiu o jogo).">
                             Zerado <span class="contador" id="contador-zerado">0</span>
                         </button>
-                        <button class="filtro-btn" data-filtro="dropado">
+                        <button class="filtro-btn" data-filtro="dropado" data-tooltip="Jogos que você <span class='tooltip-destaque-negativo'>abandonou</span> ou parou de jogar.">
                             Dropado <span class="contador" id="contador-dropado">0</span>
                         </button>
                     </div>
@@ -202,22 +212,22 @@
                 </button>
             </div>
             <div class="menu-lateral-body">
-                <button class="menu-item-mobile" id="menuItemAtualizacoes">
+                <button class="menu-item-mobile" id="menuItemAtualizacoes" data-tooltip="Changelog e novidades do PlayShelf.">
                     <i class="fas fa-clipboard-list"></i>
                     <span>Atualizações</span>
                     <span id="badgeNovaAtualizacaoMenu" class="badge-nova-atualizacao-menu" style="display: none;"></span>
                 </button>
-                <button class="menu-item-mobile" id="menuItemNotificacoes">
+                <button class="menu-item-mobile" id="menuItemNotificacoes" data-tooltip="Respostas nas suas avaliações.">
                     <i class="fas fa-bell"></i>
                     <span>Notificações</span>
                     <span id="badgeNotificacoesMenu" class="badge-notificacoes-menu" style="display: none;"></span>
                 </button>
-                <button class="menu-item-mobile" id="menuItemAmigos">
+                <button class="menu-item-mobile" id="menuItemAmigos" data-tooltip="Amigos, listas e compatibilidade.">
                     <i class="fas fa-user-friends"></i>
                     <span>Amigos</span>
                     <span id="badgeSolicitacoesMenu" class="badge-notificacoes-menu" style="display: none;"></span>
                 </button>
-                <button class="menu-item-mobile" id="menuItemEstatisticas">
+                <button class="menu-item-mobile" id="menuItemEstatisticas" data-tooltip="Suas estatísticas e comparação com amigos.">
                     <i class="fas fa-chart-bar"></i>
                     <span>Estatísticas</span>
                 </button>
@@ -250,7 +260,7 @@
             
             <div class="avaliacao-body">
                 <div class="form-group-avaliacao">
-                    <label>Status:</label>
+                    <label>Status: <span class="icone-tooltip" data-tooltip="Em que etapa está com o jogo: <span class='tooltip-destaque'>Quero Jogar</span>, <span class='tooltip-destaque-positivo'>Jogando</span>, <span class='tooltip-destaque-positivo'>Zerado</span> ou <span class='tooltip-destaque-negativo'>Dropado</span>."><i class="fas fa-info-circle"></i></span></label>
                     <select id="selectStatus">
                         <option value="quero-jogar">🎮 Quero Jogar</option>
                         <option value="jogando">⚡ Jogando</option>
@@ -260,8 +270,8 @@
                 </div>
                 
                 <div class="form-group-avaliacao">
-                    <label>Sua Avaliação:</label>
-                    <div class="avaliacao-estrelas">
+                    <label>Sua Avaliação: <span class="icone-tooltip" data-tooltip="Sua nota de <span class='tooltip-destaque'>1 a 5 estrelas</span>. Clique nas estrelas para dar a nota; na lista você pode mudar depois."><i class="fas fa-info-circle"></i></span></label>
+                    <div class="avaliacao-estrelas" data-tooltip="Clique em uma estrela para dar de <span class='tooltip-destaque'>1 a 5</span>. Passe o mouse para visualizar. Clique de novo na mesma para remover.">
                         <i class="fas fa-star estrela" data-valor="1"></i>
                         <i class="fas fa-star estrela" data-valor="2"></i>
                         <i class="fas fa-star estrela" data-valor="3"></i>
@@ -292,7 +302,10 @@
                 <img id="capaDetalhes" src="" alt="Capa do jogo">
             </div>
             <div class="detalhes-body">
-                <h2 id="nomeDetalhes"></h2>
+                <div class="detalhes-titulo-linha">
+                    <h2 id="nomeDetalhes"></h2>
+                    <span id="badgeSteamDetalhes" class="badge-steam-detalhes" style="display: none;"><img src="https://store.steampowered.com/favicon.ico" alt="" width="20" height="20"><span>Conectado à sua biblioteca Steam</span></span><span id="horasSteamDetalhes" class="horas-steam-detalhes" style="display: none;"></span>
+                </div>
                 <div class="detalhes-info">
                     <div class="info-item">
                         <span class="info-label">Lançamento:</span>
@@ -372,8 +385,8 @@
                 
                 <div id="fotosJogoSecao" class="fotos-jogo-secao">
                     <div class="fotos-jogo-header">
-                        <h3><i class="fas fa-camera"></i> Fotos da Comunidade</h3>
-                        <button id="btnPostarFoto" class="btn-postar-foto" style="display: none;">
+                        <h3><i class="fas fa-camera"></i> Fotos da Comunidade <span class="icone-tooltip" data-tooltip="Fotos que <span class='tooltip-destaque'>você e a comunidade</span> postam do jogo. Você pode curtir e postar até 5 fotos por vez."><i class="fas fa-info-circle"></i></span></h3>
+                        <button id="btnPostarFoto" class="btn-postar-foto" style="display: none;" data-tooltip="Adicione o jogo à sua lista e poste <span class='tooltip-destaque'>até 5 fotos</span> com descrição opcional.">
                             <i class="fas fa-plus"></i> Postar Foto
                         </button>
                     </div>
@@ -414,7 +427,7 @@
     <div id="modalAtualizacoes" class="modal">
         <div class="modal-conteudo modal-atualizacoes">
             <button class="btn-fechar-modal" id="btnFecharAtualizacoes" aria-label="Fechar modal de atualizações"><i class="fas fa-times"></i></button>
-            <h2><i class="fas fa-rocket"></i> Atualizações</h2>
+            <h2><i class="fas fa-rocket"></i> Atualizações <span class="icone-tooltip" data-tooltip="Todas as novidades e melhorias do PlayShelf, organizadas por versão e data."><i class="fas fa-info-circle"></i></span></h2>
             <div id="listaAtualizacoes" class="lista-atualizacoes"></div>
         </div>
     </div>
@@ -423,8 +436,8 @@
         <div class="modal-conteudo modal-notificacoes">
             <button class="btn-fechar-modal" id="btnFecharNotificacoes" aria-label="Fechar modal de notificações"><i class="fas fa-times"></i></button>
             <div class="notificacoes-header">
-                <h2><i class="fas fa-bell"></i> Notificações</h2>
-                <button id="btnMarcarTodasLidas" class="btn-marcar-lidas">
+                <h2><i class="fas fa-bell"></i> Notificações <span class="icone-tooltip" data-tooltip="Avisos quando alguém <span class='tooltip-destaque'>responde</span> sua avaliação ou sua resposta. Clique em um item para abrir o jogo."><i class="fas fa-info-circle"></i></span></h2>
+                <button id="btnMarcarTodasLidas" class="btn-marcar-lidas" data-tooltip="Marca todas as notificações como lidas e limpa a lista.">
                     <i class="fas fa-check-double"></i> Marcar todas como lidas
                 </button>
             </div>
@@ -437,10 +450,10 @@
             <button class="btn-fechar-modal" id="btnFecharEstatisticas" aria-label="Fechar modal de estatísticas"><i class="fas fa-times"></i></button>
             <h2><i class="fas fa-chart-bar"></i> Dashboard de Estatísticas</h2>
             <div class="estatisticas-tabs">
-                <button class="estatisticas-tab ativo" data-tab="pessoais">
+                <button class="estatisticas-tab ativo" data-tab="pessoais" data-tooltip="Totais, distribuição por status, <span class='tooltip-destaque-positivo'>zerados</span>, gêneros e histórico mensal de adições.">
                     <i class="fas fa-user"></i> Minhas Estatísticas
                 </button>
-                <button class="estatisticas-tab" data-tab="comparacao">
+                <button class="estatisticas-tab" data-tab="comparacao" data-tooltip="Compare suas métricas com amigos e veja a <span class='tooltip-destaque'>compatibilidade</span> de jogos em comum.">
                     <i class="fas fa-users"></i> Comparar com Amigos
                 </button>
             </div>
@@ -479,7 +492,7 @@
     <div id="modalFotoJogo" class="modal">
         <div class="modal-conteudo modal-foto-jogo">
             <button class="btn-fechar-modal" id="btnFecharFotoJogo" aria-label="Fechar modal de foto"><i class="fas fa-times"></i></button>
-            <h2><i class="fas fa-camera"></i> Postar Foto do Jogo</h2>
+            <h2><i class="fas fa-camera"></i> Postar Foto do Jogo <span class="icone-tooltip" data-tooltip="Escolha até <span class='tooltip-destaque'>5 fotos</span> (JPG, PNG, GIF, máx. 5MB cada). Descrição opcional."><i class="fas fa-info-circle"></i></span></h2>
             
             <div class="foto-jogo-preview-container">
                 <div id="fotosJogoPreviewLista" class="fotos-jogo-preview-lista" style="display: none;"></div>
@@ -500,7 +513,7 @@
             </div>
             
             <div class="form-group-foto">
-                <label for="descricaoFotoJogo">Descrição (opcional):</label>
+                <label for="descricaoFotoJogo">Descrição (opcional): <span class="icone-tooltip" data-tooltip="Texto que aparece junto da(s) foto(s), até <span class='tooltip-destaque'>200 caracteres</span>. Opcional."><i class="fas fa-info-circle"></i></span></label>
                 <textarea id="descricaoFotoJogo" placeholder="Descreva sua(s) foto(s)..." maxlength="200"></textarea>
                 <p class="contador-caracteres"><span id="contadorDescricaoFoto">0</span>/200</p>
             </div>
@@ -524,10 +537,10 @@
             <h2>Amigos</h2>
             
             <div class="amigos-tabs">
-                <button class="tab-amigos ativo" data-tab="lista">Meus Amigos</button>
-                <button class="tab-amigos" data-tab="estatisticas"><i class="fas fa-chart-line"></i> Compatibilidade</button>
-                <button class="tab-amigos" data-tab="adicionar">Adicionar</button>
-                <button class="tab-amigos" data-tab="solicitacoes">Solicitações <span id="contadorSolicitacoes" class="contador-badge"></span></button>
+                <button class="tab-amigos ativo" data-tab="lista" data-tooltip="Lista de amigos. Clique em um para ver a <span class='tooltip-destaque'>biblioteca</span> dele.">Meus Amigos</button>
+                <button class="tab-amigos" data-tab="estatisticas" data-tooltip="Ver <span class='tooltip-destaque-positivo'>compatibilidade</span> de jogos entre você e cada amigo."><i class="fas fa-chart-line"></i> Compatibilidade</button>
+                <button class="tab-amigos" data-tab="adicionar" data-tooltip="Envie solicitação usando o <span class='tooltip-destaque'>nick exato</span> do usuário.">Adicionar</button>
+                <button class="tab-amigos" data-tab="solicitacoes" data-tooltip="Solicitações pendentes. Aceite ou recuse cada uma.">Solicitações <span id="contadorSolicitacoes" class="contador-badge"></span></button>
             </div>
             
             <div id="tabLista" class="tab-content ativo">
@@ -536,8 +549,9 @@
             
             <div id="tabAdicionar" class="tab-content">
                 <div class="form-adicionar-amigo">
+                    <span class="icone-tooltip" data-tooltip="Use o nick <span class='tooltip-destaque'>exatamente</span> como o usuário cadastrou. Ex.: joao123"><i class="fas fa-info-circle"></i></span>
                     <input type="text" id="inputNickAmigo" placeholder="Digite o nick do usuário..." />
-                    <button id="btnEnviarSolicitacao">Enviar Solicitação</button>
+                    <button id="btnEnviarSolicitacao" data-tooltip="Envia a solicitação de amizade. O usuário verá em Solicitações.">Enviar Solicitação</button>
                 </div>
             </div>
             
@@ -551,12 +565,60 @@
         </div>
     </div>
 
+    <div id="modalSteam" class="modal">
+        <div class="modal-conteudo modal-steam">
+            <button class="btn-fechar-modal" id="btnFecharSteam" aria-label="Fechar modal Steam"><i class="fas fa-times"></i></button>
+            <h2><img src="https://store.steampowered.com/favicon.ico" alt="" width="24" height="24"><span class="steam-modal-marca">Steam</span></h2>
+            <div class="steam-modal-body">
+                <div id="steamDesconectado" class="steam-desconectado">
+                    <p>Conecte sua conta Steam para ver sua biblioteca de jogos aqui no PlayShelf. O login é feito na janela oficial da Steam.</p>
+                    <button id="btnConectarSteam" class="btn-conectar-steam" data-tooltip="Abre a <span class='tooltip-destaque'>janela oficial da Steam</span> para login seguro. Sua biblioteca aparecerá aqui.">
+                        <img src="https://store.steampowered.com/favicon.ico" alt="" width="20" height="20"> Conectar à Steam
+                    </button>
+                </div>
+                <div id="steamConectado" class="steam-conectado" style="display: none;">
+                    <div class="steam-conectado-header">
+                        <div class="steam-usuario-badge">
+                            <img src="https://store.steampowered.com/favicon.ico" alt="" width="16" height="16" class="steam-usuario-icone">
+                            <span id="steamNomeUsuario" class="steam-nome-usuario"></span>
+                        </div>
+                        <button id="btnDesconectarSteam" class="btn-desconectar-steam" data-tooltip="Remove a vinculação da sua conta <span class='tooltip-destaque'>Steam</span>. Sua biblioteca deixa de ser exibida aqui.">Desconectar</button>
+                    </div>
+                    <div class="steam-busca-container">
+                        <input type="text" id="campoBuscaSteam" class="campo-busca-steam" placeholder="Buscar na sua biblioteca..." autocomplete="off" aria-label="Buscar jogos na biblioteca Steam">
+                        <i class="fas fa-search steam-busca-icone"></i>
+                    </div>
+                    <h3 class="steam-biblioteca-titulo">Sua biblioteca <span id="steamBibliotecaContador" class="steam-biblioteca-contador"></span></h3>
+                    <div id="steamBibliotecaLista" class="steam-biblioteca-lista"></div>
+                    <div id="steamBibliotecaLoading" class="steam-biblioteca-loading" style="display: none;">
+                        <i class="fas fa-spinner fa-spin"></i> Carregando jogos...
+                    </div>
+                    <div id="steamBibliotecaErro" class="steam-biblioteca-erro" style="display: none;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="modalEscolherJogoSteam" class="modal">
+        <div class="modal-conteudo modal-escolher-jogo-steam">
+            <button class="btn-fechar-modal" id="btnFecharEscolherJogoSteam" aria-label="Fechar"><i class="fas fa-times"></i></button>
+            <h2><span id="escolherJogoSteamTituloTexto">Escolher jogo para vincular</span> <span class="icone-tooltip" id="escolherJogoSteamTooltip" data-tooltip=""><i class="fas fa-info-circle"></i></span></h2>
+            <p id="escolherJogoSteamSubtitulo" class="escolher-jogo-steam-subtitulo"></p>
+            <div id="escolherJogoSteamLoading" class="escolher-jogo-steam-loading" style="display: none;"><i class="fas fa-spinner fa-spin"></i> Buscando jogos semelhantes...</div>
+            <div id="escolherJogoSteamLista" class="escolher-jogo-steam-lista"></div>
+            <div id="escolherJogoSteamRodape" class="escolher-jogo-steam-rodape">
+                <button type="button" id="btnEscolherJogoSteamFallback" class="btn-escolher-jogo-steam-fallback">Usar o nome da Steam (não encontrado na base)</button>
+            </div>
+        </div>
+    </div>
+
     <div id="modalScreenshot" class="modal-screenshot">
         <div class="modal-screenshot-conteudo">
-            <button class="btn-fechar-screenshot" aria-label="Fechar visualização de screenshot"><i class="fas fa-times"></i></button>
-            <button class="screenshot-navegacao anterior" aria-label="Screenshot anterior"><i class="fas fa-chevron-left"></i></button>
+            <button class="btn-fechar-screenshot" aria-label="Fechar visualização de screenshot" data-tooltip="Fechar"><i class="fas fa-times"></i></button>
+            <span class="icone-tooltip modal-screenshot-dica" data-tooltip="Use as <span class='tooltip-destaque'>setas</span> para navegar entre fotos. Clique fora ou no X para fechar."><i class="fas fa-info-circle"></i></span>
+            <button class="screenshot-navegacao anterior" aria-label="Screenshot anterior" data-tooltip="Foto anterior"><i class="fas fa-chevron-left"></i></button>
             <img id="screenshotAmpliada" src="" alt="Screenshot ampliado">
-            <button class="screenshot-navegacao proxima" aria-label="Próximo screenshot"><i class="fas fa-chevron-right"></i></button>
+            <button class="screenshot-navegacao proxima" aria-label="Próximo screenshot" data-tooltip="Próxima foto"><i class="fas fa-chevron-right"></i></button>
         </div>
     </div>
 

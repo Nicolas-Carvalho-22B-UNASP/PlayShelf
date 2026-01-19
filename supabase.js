@@ -105,7 +105,7 @@ class SupabaseClient {
             throw new Error('Senha é obrigatória');
         }
         
-        const url = `${this.url}/rest/v1/usuarios?email=eq.${encodeURIComponent(email)}&senha=eq.${encodeURIComponent(senha)}&select=id,usuario,email,foto_perfil`;
+        const url = `${this.url}/rest/v1/usuarios?email=eq.${encodeURIComponent(email)}&senha=eq.${encodeURIComponent(senha)}&select=id,usuario,email,foto_perfil,steam_id,steam_nome`;
         const usuarios = await this._buscarJsonGet(url, { ttlMs: 5000 });
         
         if (usuarios.length === 0) {
@@ -113,6 +113,51 @@ class SupabaseClient {
         }
         
         return usuarios[0];
+    }
+
+    async atualizarSteam(usuarioId, steamId, steamNome) {
+        if (!usuarioId) throw new Error('ID do usuário é obrigatório');
+        const body = { steam_id: steamId || null, steam_nome: (steamNome && String(steamNome).trim()) || null };
+        const response = await fetch(`${this.url}/rest/v1/usuarios?id=eq.${usuarioId}`, {
+            method: 'PATCH',
+            headers: this.headers,
+            body: JSON.stringify(body)
+        });
+        if (!response.ok) {
+            const t = await response.text();
+            let e;
+            try { e = JSON.parse(t); } catch (_) { e = { message: t }; }
+            throw new Error(e.message || 'Erro ao vincular Steam');
+        }
+        return true;
+    }
+
+    async removerSteam(usuarioId) {
+        if (!usuarioId) throw new Error('ID do usuário é obrigatório');
+        const resJogos = await fetch(`${this.url}/rest/v1/jogos_usuarios?usuario_id=eq.${usuarioId}`, {
+            method: 'PATCH',
+            headers: this.headers,
+            body: JSON.stringify({ steam_appid: null })
+        });
+        if (!resJogos.ok) {
+            const t = await resJogos.text();
+            let e;
+            try { e = JSON.parse(t); } catch (_) { e = { message: t }; }
+            throw new Error(e.message || 'Erro ao desvincular jogos da Steam');
+        }
+        this._invalidarCacheGetPorPrefixo([`${this.url}/rest/v1/jogos_usuarios?usuario_id=eq.${usuarioId}`]);
+        const response = await fetch(`${this.url}/rest/v1/usuarios?id=eq.${usuarioId}`, {
+            method: 'PATCH',
+            headers: this.headers,
+            body: JSON.stringify({ steam_id: null, steam_nome: null })
+        });
+        if (!response.ok) {
+            const t = await response.text();
+            let e;
+            try { e = JSON.parse(t); } catch (_) { e = { message: t }; }
+            throw new Error(e.message || 'Erro ao desconectar Steam');
+        }
+        return true;
     }
 
     async salvarJogo(usuarioId, jogo) {
@@ -142,7 +187,8 @@ class SupabaseClient {
             lancamento: jogo.lancamento || null,
             status: jogo.status,
             avaliacao: (jogo.avaliacao && jogo.avaliacao >= 1 && jogo.avaliacao <= 5) ? jogo.avaliacao : null,
-            comentario: comentarioLimpo
+            comentario: comentarioLimpo,
+            steam_appid: (jogo.steam_appid != null && Number.isInteger(Number(jogo.steam_appid))) ? Number(jogo.steam_appid) : null
         };
 
         // Tentar adicionar ordem/ordem_por_status apenas se os campos existirem
@@ -268,7 +314,7 @@ class SupabaseClient {
     }
 
     async obterJogos(usuarioId, { forcarAtualizacao = false } = {}) {
-        const url = `${this.url}/rest/v1/jogos_usuarios?usuario_id=eq.${usuarioId}&select=id,usuario_id,jogo_id,nome,imagem,lancamento,status,avaliacao,comentario,ordem,ordem_por_status,created_at,atualizado_em&order=created_at.desc`;
+        const url = `${this.url}/rest/v1/jogos_usuarios?usuario_id=eq.${usuarioId}&select=id,usuario_id,jogo_id,nome,imagem,lancamento,status,avaliacao,comentario,ordem,ordem_por_status,created_at,atualizado_em,steam_appid&order=created_at.desc`;
         if (forcarAtualizacao) this._cacheGet.delete(url);
         const jogos = await this._buscarJsonGet(url, { ttlMs: forcarAtualizacao ? 0 : 15000 });
         
@@ -343,7 +389,43 @@ class SupabaseClient {
                 dadosLimpos.comentario = comentarioLimpo.length > 0 ? comentarioLimpo : null;
             }
         }
-        
+        if (dados.status) {
+            try {
+                const resReg = await fetch(
+                    `${this.url}/rest/v1/jogos_usuarios?id=eq.${id}&select=usuario_id,status,ordem_por_status`,
+                    { method: 'GET', headers: this.headers }
+                );
+                const arr = await resReg.json();
+                if (resReg.ok && Array.isArray(arr) && arr.length > 0) {
+                    const reg = arr[0];
+                    if (reg.status !== dados.status) {
+                        const usuarioId = reg.usuario_id;
+                        const jogos = await this.obterJogos(usuarioId, { forcarAtualizacao: true });
+                        const obterValorOrdem = (j, chave) => {
+                            if (j.ordem_por_status && typeof j.ordem_por_status === 'object' && (j.ordem_por_status[chave] !== null && j.ordem_por_status[chave] !== undefined)) {
+                                return j.ordem_por_status[chave];
+                            }
+                            return j.ordem;
+                        };
+                        const novoStatus = dados.status;
+                        let menorNovoStatus = null;
+                        for (const j of jogos) {
+                            if (j.status !== novoStatus) continue;
+                            const v = obterValorOrdem(j, novoStatus);
+                            if (typeof v === 'number' && (menorNovoStatus === null || v < menorNovoStatus)) menorNovoStatus = v;
+                        }
+                        const novaOrdemNovoStatus = (menorNovoStatus !== null) ? menorNovoStatus - 1 : -1;
+                        let ordemPorStatus = {};
+                        if (reg.ordem_por_status && typeof reg.ordem_por_status === 'object') {
+                            ordemPorStatus = { ...reg.ordem_por_status };
+                        }
+                        ordemPorStatus[novoStatus] = novaOrdemNovoStatus;
+                        dadosLimpos.ordem_por_status = ordemPorStatus;
+                    }
+                }
+            } catch (e) {
+            }
+        }
         const response = await fetch(
             `${this.url}/rest/v1/jogos_usuarios?id=eq.${id}`,
             {
@@ -726,10 +808,10 @@ class SupabaseClient {
             return [];
         }
         
-        // Buscar dados dos usuários amigos (incluindo foto de perfil)
+        // Buscar dados dos usuários amigos (incluindo foto de perfil e steam_id)
         const idsString = idsAmigos.map(a => a.usuarioId).join(',');
         const responseUsuarios = await fetch(
-            `${this.url}/rest/v1/usuarios?id=in.(${idsString})&select=id,usuario,foto_perfil`,
+            `${this.url}/rest/v1/usuarios?id=in.(${idsString})&select=id,usuario,foto_perfil,steam_id`,
             {
                 method: 'GET',
                 headers: this.headers
@@ -744,7 +826,8 @@ class SupabaseClient {
                 amizade_id: item.amizadeId,
                 id: usuario.id,
                 usuario: usuario.usuario,
-                foto_perfil: usuario.foto_perfil
+                foto_perfil: usuario.foto_perfil,
+                steam_id: usuario.steam_id || null
             };
         });
     }
@@ -779,10 +862,17 @@ class SupabaseClient {
             let somaDiferencaAvaliacoes = 0;
             let jogosComAvaliacaoComum = 0;
             let jogosMesmoStatus = 0;
+            let jogosSteamComuns = 0;
+
+            const jogosVinculadosSteamUsuario = meusJogos.filter(j => j.steam_appid != null).length;
+            const jogosVinculadosSteamAmigo = jogosAmigo.filter(j => j.steam_appid != null).length;
 
             for (const [jogoId, meuJogo] of meusJogosMap) {
                 const jogoAmigo = jogosAmigoMap.get(jogoId);
                 if (jogoAmigo) {
+                    if (meuJogo.steam_appid != null && jogoAmigo.steam_appid != null) {
+                        jogosSteamComuns++;
+                    }
                     jogosComuns.push({
                         jogo_id: jogoId,
                         nome: meuJogo.nome,
@@ -837,6 +927,9 @@ class SupabaseClient {
                 porcentagem_status_similares: Math.round(porcentagemStatusSimilares),
                 jogos_com_avaliacao_comum: jogosComAvaliacaoComum,
                 jogos_mesmo_status: jogosMesmoStatus,
+                jogos_vinculados_steam_usuario: jogosVinculadosSteamUsuario,
+                jogos_vinculados_steam_amigo: jogosVinculadosSteamAmigo,
+                jogos_steam_comuns: jogosSteamComuns,
                 detalhes: jogosComuns.slice(0, 10)
             };
         } catch (erro) {

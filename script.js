@@ -123,6 +123,32 @@ const descricaoFotoJogo = document.getElementById('descricaoFotoJogo');
 const contadorDescricaoFoto = document.getElementById('contadorDescricaoFoto');
 const btnConfirmarFotoJogo = document.getElementById('btnConfirmarFotoJogo');
 const btnCancelarFotoJogo = document.getElementById('btnCancelarFotoJogo');
+const btnSteam = document.getElementById('btnSteam');
+const modalSteam = document.getElementById('modalSteam');
+const btnFecharSteam = document.getElementById('btnFecharSteam');
+const btnConectarSteam = document.getElementById('btnConectarSteam');
+const btnDesconectarSteam = document.getElementById('btnDesconectarSteam');
+const steamDesconectado = document.getElementById('steamDesconectado');
+const steamConectado = document.getElementById('steamConectado');
+const steamNomeUsuario = document.getElementById('steamNomeUsuario');
+const steamBibliotecaLista = document.getElementById('steamBibliotecaLista');
+const steamBibliotecaLoading = document.getElementById('steamBibliotecaLoading');
+const steamBibliotecaErro = document.getElementById('steamBibliotecaErro');
+const campoBuscaSteam = document.getElementById('campoBuscaSteam');
+const modalEscolherJogoSteam = document.getElementById('modalEscolherJogoSteam');
+const btnFecharEscolherJogoSteam = document.getElementById('btnFecharEscolherJogoSteam');
+const escolherJogoSteamSubtitulo = document.getElementById('escolherJogoSteamSubtitulo');
+const escolherJogoSteamLista = document.getElementById('escolherJogoSteamLista');
+const escolherJogoSteamLoading = document.getElementById('escolherJogoSteamLoading');
+const btnEscolherJogoSteamFallback = document.getElementById('btnEscolherJogoSteamFallback');
+let steamEscolherContexto = null;
+let steamJogosCache = [];
+let steamMeusJogosCache = [];
+let steamScrollSaveTimeout;
+let steamBibliotecaCache = null;
+let steamBibliotecaCarregando = false;
+let steamBibliotecaPorSteamIdCache = Object.create(null);
+const TTL_BIB_STEAM_POR_ID = 5 * 60 * 1000;
 
 // Variáveis de estado
 let jogoParaAdicionar = null;
@@ -1187,7 +1213,7 @@ function inicializarDelegacaoMinhaLista() {
     }
     minhaLista.addEventListener('click', (e) => {
         const target = e.target;
-        const elementoDetalhe = target?.closest?.('.jogo-imagem, .jogo-titulo');
+        const elementoDetalhe = target?.closest?.('.jogo-imagem, .jogo-titulo-wrapper');
         if (elementoDetalhe) {
             e.preventDefault();
             const jogoId = parseInt(elementoDetalhe.dataset.id);
@@ -1526,11 +1552,13 @@ function abrirModalEdicao(jogo) {
 
 async function fecharModal() {
     telaAvaliacao.style.display = 'none';
-    
-    // Limpar estado da tela de avaliação
+    let spSteam = null;
+    if (sessionStorage.getItem('veioDoSteamAdicionar')) {
+        spSteam = parseInt(sessionStorage.getItem('steamScrollPos') || '0', 10);
+        sessionStorage.removeItem('veioDoSteamAdicionar');
+        sessionStorage.removeItem('steamScrollPos');
+    }
     sessionStorage.removeItem('telaAvaliacaoAberta');
-    
-    // Se veio da tela de detalhes, volta para ela
     if (veioDeDetalhes) {
         telaDetalhes.style.display = 'block';
         veioDeDetalhes = false;
@@ -1603,8 +1631,8 @@ async function fecharModal() {
             sessionStorage.removeItem('filtroAntesAvaliacao');
             sessionStorage.removeItem('scrollAntesAvaliacao');
         }
+        if (spSteam != null) abrirModalSteam({ scrollPos: spSteam });
     }
-    
     jogoParaAdicionar = null;
     modoEdicao = false;
     avaliacaoSelecionada = 0;
@@ -1834,9 +1862,27 @@ function criarTrailersYouTube(nomeJogo) {
 }
 
 function atualizarBotaoModalDetalhes(jaAdicionado) {
+    const jogoNaMinhaLista = meusJogosCache.find(j => j.jogo_id === jogoDetalhesAtual?.id);
+    const badgeSteamDetalhes = document.getElementById('badgeSteamDetalhes');
+    if (badgeSteamDetalhes) {
+        let mostrarBadgeSteam = false;
+        let textoBadgeSteam = 'Conectado à sua biblioteca Steam';
+        if (amigoVisualizando) {
+            const jogoAmigo = (jogosCache || []).find(j => String(j.jogo_id) === String(jogoDetalhesAtual?.id));
+            if (jogoAmigo?.steam_appid) {
+                mostrarBadgeSteam = true;
+                textoBadgeSteam = 'Na biblioteca Steam dele';
+            }
+        } else if (jogoNaMinhaLista?.steam_appid) {
+            mostrarBadgeSteam = true;
+        }
+        badgeSteamDetalhes.style.display = mostrarBadgeSteam ? 'inline-flex' : 'none';
+        if (mostrarBadgeSteam) {
+            const spanTexto = badgeSteamDetalhes.querySelector('span');
+            if (spanTexto) spanTexto.textContent = textoBadgeSteam;
+        }
+    }
     if (jaAdicionado) {
-        // Buscar o jogo na MINHA lista para pegar os dados
-        const jogoNaMinhaLista = meusJogosCache.find(j => j.jogo_id === jogoDetalhesAtual.id);
         
         // Verificar se tem avaliação (estrelas ou comentário)
         const temAvaliacao = jogoNaMinhaLista && (
@@ -1919,6 +1965,69 @@ function inicializarDelegacaoDetalhes() {
     telaDetalhes.dataset.imgLoadListenerAtivo = 'true';
 }
 
+async function abrirDetalhesJogoSteam(jogo) {
+    sessionStorage.setItem('scrollPosition', window.scrollY.toString());
+    sessionStorage.setItem('filtroAtual', filtroAtual);
+    sessionStorage.setItem('jogoDetalhesAberto', String(jogo.jogo_id));
+    sessionStorage.setItem('jogoDetalhesAbertoSteam', '1');
+    appContainer.style.display = 'none';
+    telaDetalhes.style.display = 'block';
+    window.scrollTo(0, 0);
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+    jogoDetalhesAtual = { ...jogo, id: jogo.jogo_id };
+    capaDetalhes.classList.add('skeleton', 'skeleton-media', 'skeleton-img-loading');
+    capaDetalhes.src = 'data:image/gif;base64,R0lGODlhAQABAAAAACw=';
+    nomeDetalhes.textContent = '';
+    const badgeSteamEl = document.getElementById('badgeSteamDetalhes');
+    if (badgeSteamEl) badgeSteamEl.style.display = 'none';
+    const horasSteamEl = document.getElementById('horasSteamDetalhes');
+    if (horasSteamEl) { horasSteamEl.style.display = 'none'; horasSteamEl.textContent = ''; }
+    lancamentoDetalhes.textContent = '';
+    descricaoDetalhes.textContent = '';
+    plataformasDetalhes.textContent = '';
+    generosDetalhes.textContent = '';
+    desenvolvedoraDetalhes.textContent = '';
+    areaAcaoDetalhes.innerHTML = '';
+    const classificacaoContainer = document.getElementById('classificacaoContainer');
+    if (classificacaoContainer) classificacaoContainer.style.display = 'none';
+    const metacriticDetalhes = document.getElementById('metacriticDetalhes');
+    if (metacriticDetalhes) metacriticDetalhes.textContent = 'Não informado';
+    if (playtimeContainer) { playtimeContainer.style.display = 'none'; if (playtimeDetalhes) playtimeDetalhes.textContent = ''; }
+    const dlcsSecao = document.getElementById('dlcsSecao');
+    if (dlcsSecao) dlcsSecao.style.display = 'none';
+    const trailersSecao = document.getElementById('trailersSecao');
+    if (trailersSecao) trailersSecao.style.display = 'none';
+    const screenshotsSecao = document.getElementById('screenshotsSecao');
+    if (screenshotsSecao) screenshotsSecao.style.display = 'none';
+    const requisitosSecao = document.getElementById('requisitosHardwareSecao');
+    if (requisitosSecao) requisitosSecao.style.display = 'none';
+    const jogosRelacionadosSecao = document.getElementById('jogosRelacionadosSecao');
+    if (jogosRelacionadosSecao) jogosRelacionadosSecao.style.display = 'none';
+    const amigosComJogo = document.getElementById('amigosComJogo');
+    if (amigosComJogo) amigosComJogo.style.display = 'none';
+    const listaAvaliacoesEl = document.getElementById('listaAvaliacoes');
+    if (listaAvaliacoesEl) listaAvaliacoesEl.innerHTML = '<p class="sem-informacao">Carregando...</p>';
+    nomeDetalhes.textContent = jogo.nome || 'Sem nome';
+    lancamentoDetalhes.textContent = formatarData(jogo.lancamento);
+    plataformasDetalhes.textContent = 'Não informado';
+    generosDetalhes.textContent = 'Não informado';
+    desenvolvedoraDetalhes.textContent = 'Não informado';
+    descricaoDetalhes.textContent = 'Jogo da sua biblioteca Steam. Informações adicionais não disponíveis.';
+    capaDetalhes.src = jogo.imagem || 'data:image/gif;base64,R0lGODlhAQABAAAAACw=';
+    capaDetalhes.onload = () => { capaDetalhes.classList.remove('skeleton', 'skeleton-img-loading'); };
+    capaDetalhes.onerror = () => { capaDetalhes.classList.remove('skeleton', 'skeleton-img-loading'); };
+    atualizarBotaoModalDetalhes(true);
+    const appidSteam = jogo.steam_appid || jogo.jogo_id;
+    await Promise.allSettled([
+        carregarAvaliacoes(jogo.jogo_id),
+        carregarFotosJogo(jogo.jogo_id),
+        carregarAmigosComJogo(jogo.jogo_id),
+        (usuarioLogado?.steam_id && appidSteam) ? atualizarHorasSteamDetalhes(usuarioLogado.steam_id, appidSteam) : Promise.resolve()
+    ]);
+    if (amigosComJogo) amigosComJogo.style.display = 'block';
+}
+
 async function abrirModalDetalhes(jogoId) {
     const contextoId = criarNovoContextoDetalhes();
     // Salvar posição do scroll antes de abrir detalhes
@@ -1929,6 +2038,7 @@ async function abrirModalDetalhes(jogoId) {
     
     // Salvar ID do jogo para restaurar ao atualizar página
     sessionStorage.setItem('jogoDetalhesAberto', jogoId.toString());
+    sessionStorage.removeItem('jogoDetalhesAbertoSteam');
     
     // Ocultar container principal e mostrar tela de detalhes
     appContainer.style.display = 'none';
@@ -1964,6 +2074,10 @@ async function abrirModalDetalhes(jogoId) {
     capaDetalhes.classList.add('skeleton-img-loading');
     capaDetalhes.src = 'data:image/gif;base64,R0lGODlhAQABAAAAACw=';
     nomeDetalhes.textContent = '';
+    const badgeSteamEl = document.getElementById('badgeSteamDetalhes');
+    if (badgeSteamEl) badgeSteamEl.style.display = 'none';
+    const horasSteamDetalhesEl = document.getElementById('horasSteamDetalhes');
+    if (horasSteamDetalhesEl) { horasSteamDetalhesEl.style.display = 'none'; horasSteamDetalhesEl.textContent = ''; }
     lancamentoDetalhes.textContent = '';
     descricaoDetalhes.textContent = '';
     plataformasDetalhes.textContent = '';
@@ -2036,12 +2150,25 @@ async function abrirModalDetalhes(jogoId) {
         conquistasJogo.innerHTML = gerarSkeletonGridHtml(2);
     }
     
-    const detalhes = await buscarDetalhesJogo(jogoId);
+    const jogoFromCache = (meusJogosCache || []).find(j => String(j.jogo_id) === String(jogoId))
+        || (jogosCache || []).find(j => String(j.jogo_id) === String(jogoId));
+    const steamSomente = jogoFromCache && jogoFromCache.steam_appid && String(jogoFromCache.jogo_id) === String(jogoFromCache.steam_appid);
+    if (steamSomente) {
+        abrirDetalhesJogoSteam(jogoFromCache);
+        return;
+    }
+
+    let detalhes = await buscarDetalhesJogo(jogoId);
     if (!isContextoDetalhesAtivo(contextoId)) return;
-    
+
+    if (!detalhes && jogoFromCache && jogoFromCache.steam_appid) {
+        abrirDetalhesJogoSteam(jogoFromCache);
+        return;
+    }
+
     if (detalhes) {
         jogoDetalhesAtual = {
-            id: detalhes.id,
+            id: jogoId,
             nome: detalhes.name,
             imagem: detalhes.background_image || 'https://via.placeholder.com/300x400?text=Sem+Imagem',
             lancamento: detalhes.released
@@ -2146,17 +2273,20 @@ async function abrirModalDetalhes(jogoId) {
             descricaoDetalhes.textContent = descricaoLimpa;
         }
         
-        const jaAdicionado = jogoJaAdicionado(detalhes.id);
+        const jaAdicionado = jogoJaAdicionado(jogoId);
         atualizarBotaoModalDetalhes(jaAdicionado);
-        
+
+        const steamIdDetalhes = amigoVisualizando ? (amigoVisualizando.steam_id || null) : (usuarioLogado?.steam_id || null);
+        const steamAppIdDetalhes = jogoFromCache?.steam_appid;
         await Promise.allSettled([
             carregarTrailers(detalhes.id, detalhes.name, contextoId),
             carregarRequisitosHardware(detalhes, contextoId),
             carregarScreenshots(detalhes.id, contextoId),
-            carregarFotosJogo(detalhes.id, contextoId),
-            carregarAmigosComJogo(detalhes.id, contextoId),
-            carregarAvaliacoes(detalhes.id, contextoId),
-            carregarJogosRelacionados(detalhes, contextoId)
+            carregarFotosJogo(jogoId, contextoId),
+            carregarAmigosComJogo(jogoId, contextoId),
+            carregarAvaliacoes(jogoId, contextoId),
+            carregarJogosRelacionados(detalhes, contextoId),
+            (steamIdDetalhes && steamAppIdDetalhes) ? atualizarHorasSteamDetalhes(steamIdDetalhes, steamAppIdDetalhes, contextoId) : Promise.resolve()
         ]);
         
         // Garantir scroll no topo após todo conteúdo ser carregado
@@ -2899,7 +3029,7 @@ function fecharModalScreenshot() {
         previewSliderRefs.setSlide(modalIndex);
     }
     
-    modalScreenshot.classList.remove('ativo');
+    fecharModalComAnimacao(modalScreenshot);
     document.body.style.overflow = 'auto';
     
     // Restaurar conteúdo original do modal
@@ -3379,7 +3509,7 @@ function abrirModalFotoJogo(jogoId) {
 }
 
 function fecharModalFotoJogo() {
-    modalFotoJogo.classList.remove('ativo');
+    fecharModalComAnimacao(modalFotoJogo);
     inputFotoJogo.value = '';
     fotosSelecionadas = [];
     jogoIdFotoAtual = null;
@@ -3900,7 +4030,7 @@ function mostrarConfirmacao(titulo, mensagem, callback) {
 }
 
 function fecharConfirmacao() {
-    modalConfirmacao.classList.remove('ativo');
+    fecharModalComAnimacao(modalConfirmacao);
     acaoConfirmacao = null;
 }
 
@@ -4018,20 +4148,29 @@ async function carregarRespostas(avaliacaoId, forcarAtualizacao = false) {
     }
 }
 
+function obterIdUltimoAutorNaSubarvore(no) {
+    const dt = (n) => new Date(n.criado_em || n.created_at || 0).getTime();
+    let maisRecente = no;
+    const visitar = (n) => {
+        if (dt(n) > dt(maisRecente)) maisRecente = n;
+        (n.filhos || []).forEach(visitar);
+    };
+    visitar(no);
+    return maisRecente.usuario_id;
+}
+
 async function renderizarArvoreRespostas(respostas, avaliacaoId, nivel) {
-    // Buscar contadores de likes/dislikes para cada resposta
     const contadoresRespostas = await Promise.all(
         respostas.map(r => supabase.contarLikesDislikes(null, r.id))
     );
-    
-    // Buscar likes/dislikes do usuário para cada resposta
     const likesUsuarioRespostas = usuarioLogado ? await Promise.all(
         respostas.map(r => supabase.obterLikeDislike(usuarioLogado.id, null, r.id))
     ) : [];
-    
     const htmlPromises = respostas.map(async (resposta, index) => {
         const ehMinhaResposta = usuarioLogado && usuarioLogado.id === resposta.usuario_id;
-        const podeResponder = usuarioLogado && !ehMinhaResposta && !amigoVisualizando;
+        const ultimoAutorId = obterIdUltimoAutorNaSubarvore(resposta);
+        const euFuiOUltimo = usuarioLogado && ultimoAutorId === usuarioLogado.id;
+        const podeResponder = usuarioLogado && !ehMinhaResposta && !amigoVisualizando && !euFuiOUltimo;
         
         const respostaTextoEscaped = escapeHtml(resposta.texto);
         const respostaUsuarioNomeEscaped = escapeHtml(resposta.usuario_nome);
@@ -4046,7 +4185,7 @@ async function renderizarArvoreRespostas(respostas, avaliacaoId, nivel) {
             </button>` : '';
         
         const btnResponder = podeResponder ?
-            `<button class="btn-responder-thread" data-resposta-id="${resposta.id}" data-avaliacao-id="${avaliacaoId}" data-resposta-autor="${respostaUsuarioNomeEscaped}">
+            `<button class="btn-responder btn-responder-thread" data-resposta-id="${resposta.id}" data-avaliacao-id="${avaliacaoId}" data-resposta-autor="${respostaUsuarioNomeEscaped}">
                 <i class="fas fa-reply"></i> Responder
             </button>` : '';
         
@@ -4480,8 +4619,8 @@ function fecharModalDetalhes() {
     telaDetalhes.style.display = 'none';
     appContainer.style.display = 'block';
     
-    // Limpar jogo aberto
     sessionStorage.removeItem('jogoDetalhesAberto');
+    sessionStorage.removeItem('jogoDetalhesAbertoSteam');
     
     // Restaurar posição do scroll
     const scrollPosition = sessionStorage.getItem('scrollPosition');
@@ -4714,6 +4853,7 @@ function destruirOrdenacaoMinhaLista() {
     }
     pararAutoScrollDrag();
     document.body.classList.remove('is-dragging');
+    tooltipDuranteDrag = false;
 }
 
 function inicializarOrdenacaoMinhaLista() {
@@ -4764,6 +4904,8 @@ function inicializarOrdenacaoMinhaLista() {
         dragClass: 'sortable-drag',
         onStart: (evt) => {
             document.body.classList.add('is-dragging');
+            tooltipDuranteDrag = true;
+            esconderTooltipInformativoImediato();
             const handle = evt.item?.querySelector?.('.drag-handle');
             if (handle) {
                 handle.addEventListener('click', bloquearCliqueHandleDuranteDrag, { capture: true, once: true });
@@ -4783,6 +4925,7 @@ function inicializarOrdenacaoMinhaLista() {
         onEnd: async () => {
             pararAutoScrollDrag();
             document.body.classList.remove('is-dragging');
+            tooltipDuranteDrag = false;
             await salvarNovaOrdem();
         }
     });
@@ -4996,6 +5139,7 @@ async function exibirMinhaLista() {
             card.dataset.statusJogo = jogo.status;
             card.dataset.ordem = jogo.ordem || index + 1;
             if (!podeArrastar) card.dataset.dragDisabled = 'true';
+            if (jogo.steam_appid) card.dataset.steamAppid = jogo.steam_appid;
         }
 
         const avaliacaoAtual = jogo.avaliacao || 0;
@@ -5015,10 +5159,15 @@ async function exibirMinhaLista() {
         const decodingStrategy = ConnectionManager.getDecodingStrategy();
         const fetchPriority = ConnectionManager.velocidade === 'slow' ? 'low' : 'auto';
         card.innerHTML = `
-            ${podeArrastar ? '<div class="drag-handle"><i class="fas fa-grip-vertical"></i></div>' : ''}
-            <img src="${IMG_PLACEHOLDER_SRC}" data-src="${adjustedUrl}" alt="${jogoNomeEscaped}" class="jogo-imagem skeleton-img-loading" data-id="${jogo.jogo_id}" draggable="false" loading="${loadingStrategy}" decoding="${decodingStrategy}" style="cursor: pointer;" fetchpriority="${fetchPriority}" width="200" height="250">
+            ${podeArrastar ? '<div class="drag-handle" data-tooltip="Arraste para <span class=\'tooltip-destaque\'>reordenar</span> os jogos. A ordem é salva automaticamente por status."><i class="fas fa-grip-vertical"></i></div>' : ''}
+            <div class="jogo-capa-wrapper">
+                <img src="${IMG_PLACEHOLDER_SRC}" data-src="${adjustedUrl}" alt="${jogoNomeEscaped}" class="jogo-imagem skeleton-img-loading" data-id="${jogo.jogo_id}" draggable="false" loading="${loadingStrategy}" decoding="${decodingStrategy}" style="cursor: pointer;" fetchpriority="${fetchPriority}" width="200" height="250">
+            </div>
             <div class="jogo-info">
-                <h3 class="jogo-titulo" data-id="${jogo.jogo_id}" style="cursor: pointer;">${jogoNomeEscaped}</h3>
+                <div class="jogo-titulo-wrapper" data-id="${jogo.jogo_id}" style="cursor: pointer;">
+                    <h3 class="jogo-titulo">${jogoNomeEscaped}</h3>
+                    ${jogo.steam_appid ? `<span class="badge-steam-card"${amigoVisualizando ? ' title="Na biblioteca Steam dele"' : ''}><img src="https://upload.wikimedia.org/wikipedia/commons/8/83/Steam_icon_logo.svg" alt="Steam" width="18" height="18"></span>` : ''}
+                </div>
                 <p>${formatarData(jogo.lancamento)}</p>
                 ${estrelasHTML}
                 <span class="status-badge status-${jogo.status}" data-id="${jogo.id}" ${!amigoVisualizando ? 'style="cursor: pointer;"' : 'style="cursor: default;"'}>
@@ -5044,8 +5193,7 @@ async function exibirMinhaLista() {
         const img = card.querySelector('img');
         registrarImagemLazy(img);
         
-        // Prefetch ao passar o mouse sobre o card apenas em conexões rápidas
-        if (ConnectionManager.velocidade === 'fast') {
+        if (ConnectionManager.velocidade === 'fast' && !jogo.steam_appid) {
             card.addEventListener('mouseenter', () => {
                 prefetchDetalhesJogo(jogo.jogo_id);
             }, { once: true, passive: true });
@@ -5180,15 +5328,18 @@ btnConfirmar.addEventListener('click', async () => {
                     sessionStorage.removeItem('scrollAntesAvaliacao');
                 }
             }
-            
+            if (sessionStorage.getItem('veioDoSteamAdicionar')) {
+                sessionStorage.removeItem('veioDoSteamAdicionar');
+                const sp = parseInt(sessionStorage.getItem('steamScrollPos') || '0', 10);
+                sessionStorage.removeItem('steamScrollPos');
+                abrirModalSteam({ scrollPos: sp });
+            }
             sessionStorage.removeItem('telaAvaliacaoAberta');
-            
             jogoParaAdicionar = null;
             modoEdicao = false;
             avaliacaoSelecionada = 0;
             comentarioAtual = '';
         }
-        
         jogoParaAdicionar = null;
         modoEdicao = false;
     }
@@ -5377,6 +5528,37 @@ document.getElementById('btnToggleCadastroSenha').addEventListener('click', () =
 
 usuarioLogado = obterUsuarioLogado();
 atualizarInterfaceUsuario();
+
+(async () => {
+    const params = new URLSearchParams(location.search);
+    const sc = params.get('steam_callback');
+    const sid = params.get('steam_id');
+    const sn = params.get('steam_nome') || '';
+    const er = params.get('steam_erro');
+    const limparUrlSteam = () => { if (history.replaceState) history.replaceState({}, '', (location.pathname || '/') + (location.hash || '')); };
+    if (er) {
+        limparUrlSteam();
+        const msg = { '1': 'Resposta inválida da Steam.', '2': 'Não foi possível verificar o login Steam.', '3': 'Login Steam não validado.', '4': 'Não foi possível obter o ID Steam.' }[er] || 'Erro ao conectar à Steam.';
+        mostrarNotificacao(msg, 'erro');
+        return;
+    }
+    if (sc === '1' && sid && usuarioLogado) {
+        try {
+            await supabase.atualizarSteam(usuarioLogado.id, sid, sn);
+            usuarioLogado.steam_id = sid;
+            usuarioLogado.steam_nome = sn;
+            salvarUsuarioLogado(usuarioLogado);
+            mostrarNotificacao('Conta Steam conectada!', 'sucesso');
+            setTimeout(() => abrirModalSteam(), 300);
+        } catch (e) {
+            mostrarNotificacao(e.message || 'Erro ao conectar Steam.', 'erro');
+        }
+        limparUrlSteam();
+    } else if (sc === '1' && sid) {
+        limparUrlSteam();
+    }
+})();
+
 inicializarDelegacaoResultadosBusca();
 inicializarDelegacaoMinhaLista();
 inicializarDelegacaoDetalhes();
@@ -5429,18 +5611,19 @@ if (usuarioLogado) {
             await exibirMinhaLista();
         }
         
-        // Restaurar jogo nos detalhes se havia um aberto
         if (jogoDetalhesAberto) {
+            sessionStorage.removeItem('jogoDetalhesAbertoSteam');
             abrirModalDetalhes(parseInt(jogoDetalhesAberto));
+        } else if (sessionStorage.getItem('steamModalBiblioteca') && usuarioLogado.steam_id) {
+            sessionStorage.removeItem('steamModalBiblioteca');
+            const sp = parseInt(sessionStorage.getItem('steamBibliotecaScroll') || '0', 10);
+            sessionStorage.removeItem('steamBibliotecaScroll');
+            abrirModalSteam({ scrollPos: sp });
         } else {
-            // Restaurar scroll após carregar a lista
-            // Usar chave específica baseada no contexto
-            const scrollSalvo = amigoVisualizando 
+            const scrollSalvo = amigoVisualizando
                 ? sessionStorage.getItem('scrollPositionListaAmigo')
                 : sessionStorage.getItem('scrollPositionMinhaLista') || sessionStorage.getItem('scrollPosition');
-            
             if (scrollSalvo) {
-                // Usar função de restauração precisa para garantir que funcione
                 setTimeout(async () => {
                     await restaurarScrollPreciso(parseInt(scrollSalvo));
                 }, 300);
@@ -5524,6 +5707,18 @@ function verificarNovasAtualizacoes() {
     }
 }
 
+function fecharModalComAnimacao(modal) {
+    if (!modal || !modal.classList.contains('ativo')) return;
+    modal.classList.add('fechando');
+    setTimeout(() => {
+        modal.classList.remove('ativo', 'fechando');
+        if (modal === modalSteam) {
+            sessionStorage.removeItem('steamModalBiblioteca');
+            sessionStorage.removeItem('steamBibliotecaScroll');
+        }
+    }, 200);
+}
+
 function abrirModalAtualizacoes() {
     // Verificar se o modal já está aberto
     if (modalAtualizacoes.classList.contains('ativo')) {
@@ -5598,6 +5793,329 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
+function abrirModalSteam(opcoes) {
+    if (!modalSteam) return;
+    if (!usuarioLogado) {
+        mostrarNotificacao('Faça login para conectar sua Steam.', 'erro');
+        return;
+    }
+    const temSteam = !!(usuarioLogado.steam_id && String(usuarioLogado.steam_id).trim());
+    if (steamDesconectado) steamDesconectado.style.display = temSteam ? 'none' : 'flex';
+    if (steamConectado) steamConectado.style.display = temSteam ? 'block' : 'none';
+    if (steamNomeUsuario) steamNomeUsuario.textContent = usuarioLogado.steam_nome || usuarioLogado.steam_id || 'Steam';
+    if (steamBibliotecaLoading) steamBibliotecaLoading.style.display = 'none';
+    if (steamBibliotecaErro) steamBibliotecaErro.style.display = 'none';
+    if (steamBibliotecaLista) steamBibliotecaLista.innerHTML = '';
+    if (temSteam) {
+        sessionStorage.setItem('steamModalBiblioteca', '1');
+        if (opcoes && typeof opcoes.scrollPos === 'number') {
+            carregarBibliotecaSteam({ scrollPos: opcoes.scrollPos });
+        } else {
+            carregarBibliotecaSteam();
+        }
+        modalSteam.classList.add('modal-steam-tela-inteira');
+    } else {
+        modalSteam.classList.remove('modal-steam-tela-inteira');
+    }
+    modalSteam.classList.add('ativo');
+}
+
+function extrairBaseNomeParaMatching(nome) {
+    if (!nome || !String(nome).trim()) return '';
+    const EDICOES = new Set(['edition','steam','legacy','enhanced','playtest','goty','deluxe','definitive','complete','remastered','remaster','beta','alpha','premium','digital','version','build','collector','gold','android','ios','pc']);
+    let s = String(nome).trim().toLowerCase().replace(/\s+/g, ' ').replace(/[®©™]/g, '');
+    let prev;
+    do {
+        prev = s;
+        const mDash = s.match(/\s*-\s*([^-]+)\s*$/);
+        if (mDash) {
+            const sufixo = mDash[1].trim().toLowerCase();
+            const palavras = sufixo.split(/\s+/).filter(Boolean);
+            if (palavras.length > 0 && (EDICOES.has(sufixo) || palavras.every(p => EDICOES.has(p)))) {
+                s = s.replace(/\s*-\s*[^-]+\s*$/, '').trim();
+            }
+        }
+        const mPar = s.match(/\s*\(([^)]+)\)\s*$/);
+        if (mPar && EDICOES.has(mPar[1].trim().toLowerCase())) {
+            s = s.replace(/\s*\([^)]+\)\s*$/, '').trim();
+        }
+        const mLast = s.match(/\s+(\w+)\s*$/);
+        if (mLast && EDICOES.has(mLast[1].toLowerCase())) {
+            s = s.replace(/\s+\w+\s*$/, '').trim();
+        }
+    } while (prev !== s && s.length >= 2);
+    return s.replace(/\s+/g, ' ').trim();
+}
+
+function renderizarSteamBiblioteca(jogos, meusJogos) {
+    return jogos.map(j => {
+        const nome = escapeHtml(j.name || 'Sem nome');
+        const appid = j.appid || 0;
+        const nameRaw = j.name || '';
+        const imgSteam = `https://cdn.cloudflare.steamstatic.com/steam/apps/${appid}/header.jpg`;
+        const jaVinculado = (meusJogos || []).find(m => m.steam_appid === appid || String(m.jogo_id) === String(appid));
+        const baseSteam = extrairBaseNomeParaMatching(nameRaw);
+        const jaNaListaNaoVinculado = !jaVinculado && baseSteam.length >= 3
+            ? (meusJogos || []).find(m => {
+                if (m.steam_appid) return false;
+                const baseLista = extrairBaseNomeParaMatching(m.nome);
+                return baseLista.length >= 3 && baseSteam === baseLista;
+            }) || null
+            : null;
+        const img = (jaVinculado || jaNaListaNaoVinculado)?.imagem || imgSteam;
+        const min = Number(j.playtime_forever) || 0;
+        const horas = min >= 60 ? (min / 60).toFixed(1) + ' h' : min + ' min';
+        let btnHtml;
+        if (jaVinculado) {
+            btnHtml = `<button type="button" class="btn-steam-adicionado" disabled><i class="fas fa-check"></i> Adicionado</button><button type="button" class="btn-desvincular-steam-card" data-registro-id="${jaVinculado.id}"><i class="fas fa-unlink"></i> Desvincular</button>`;
+        } else if (jaNaListaNaoVinculado) {
+            btnHtml = `<button type="button" class="btn-vincular-steam" data-registro-id="${jaNaListaNaoVinculado.id}" data-jogo-nome="${escapeHtml(jaNaListaNaoVinculado.nome || '')}" data-jogo-imagem="${escapeHtml(jaNaListaNaoVinculado.imagem || '')}" data-jogo-lancamento="${escapeHtml(jaNaListaNaoVinculado.lancamento || '')}"><i class="fas fa-link"></i> Vincular à Steam</button>`;
+        } else {
+            btnHtml = `<button type="button" class="btn-steam-adicionar" data-appid="${appid}"><i class="fas fa-plus"></i> Adicionar</button>`;
+        }
+        return `<div class="steam-jogo-card" data-appid="${appid}"><img src="${escapeHtml(img)}" alt="${nome}" loading="lazy" decoding="async" onerror="this.src='data:image/svg+xml,<svg xmlns=\\'http://www.w3.org/2000/svg\\' viewBox=\\'0 0 460 215\\' fill=\\'%23333\\'><rect width=\\'460\\' height=\\'215\\'/><text x=\\'50%\\' y=\\'50%\\' dominant-baseline=\\'middle\\' text-anchor=\\'middle\\' fill=\\'%23888\\'>?</text></svg>'"><div class="steam-jogo-card-overlay"><div class="steam-jogo-info"><p class="steam-jogo-nome" title="${nome}">${nome}</p><p class="steam-jogo-horas">${horas}</p></div><div class="steam-jogo-acoes">${btnHtml}</div></div></div>`;
+    }).join('');
+}
+
+async function buscarJogosSemelhantesRawg(nome) {
+    if (!nome || !String(nome).trim()) return [];
+    try {
+        const url = `${API_BASE}/games?key=${API_KEY}&search=${encodeURIComponent(String(nome).trim())}&page_size=15`;
+        const r = await fetch(url);
+        const dados = await r.json();
+        return Array.isArray(dados.results) ? dados.results : [];
+    } catch (e) {
+        return [];
+    }
+}
+
+function fecharModalEscolherJogoSteam() {
+    if (modalEscolherJogoSteam) fecharModalComAnimacao(modalEscolherJogoSteam);
+    steamEscolherContexto = null;
+}
+
+async function aoConfirmarVincularSteam() {
+    const ctx = steamEscolherContexto;
+    fecharModalEscolherJogoSteam();
+    if (!ctx?.apenasVincular || !ctx.registroId || !ctx.appid) return;
+    try {
+        await supabase.atualizarJogo(ctx.registroId, { steam_appid: Number(ctx.appid) });
+        await obterJogosSalvos(true, true);
+        await carregarBibliotecaSteam({ scrollPos: steamBibliotecaLista ? steamBibliotecaLista.scrollTop : 0 });
+        mostrarNotificacao('Jogo vinculado à sua biblioteca Steam.', 'sucesso');
+    } catch (err) {
+        mostrarNotificacao(err.message || 'Erro ao vincular.', 'erro');
+    }
+}
+
+async function aoEscolherJogoSteam(jogo) {
+    const ctx = steamEscolherContexto;
+    fecharModalEscolherJogoSteam();
+    if (!ctx || !ctx.appid) return;
+    const appid = Number(ctx.appid);
+    const jogoComSteam = jogo
+        ? { id: jogo.id, nome: jogo.nome, imagem: jogo.imagem || null, lancamento: jogo.lancamento || null, steam_appid: appid }
+        : { id: appid, nome: ctx.nomeSteam, imagem: ctx.imgSteam || null, lancamento: null, steam_appid: appid };
+    const meusJogos = await supabase.obterJogos(usuarioLogado.id, { forcarAtualizacao: false });
+    const jaTem = (meusJogos || []).find(m => String(m.jogo_id) === String(jogoComSteam.id));
+    if (jaTem) {
+        try {
+            await supabase.atualizarJogo(jaTem.id, { steam_appid: appid });
+            await obterJogosSalvos(true, true);
+            await carregarBibliotecaSteam({ scrollPos: steamBibliotecaLista ? steamBibliotecaLista.scrollTop : 0 });
+            mostrarNotificacao('Jogo vinculado à sua biblioteca Steam.', 'sucesso');
+        } catch (err) {
+            mostrarNotificacao(err.message || 'Erro ao vincular.', 'erro');
+        }
+        return;
+    }
+    sessionStorage.setItem('veioDoSteamAdicionar', '1');
+    sessionStorage.setItem('steamScrollPos', String(steamBibliotecaLista ? steamBibliotecaLista.scrollTop : 0));
+    fecharModalComAnimacao(modalSteam);
+    abrirModal(jogoComSteam, null);
+}
+
+async function abrirModalEscolherJogoSteam(nomeSteam, appid, imgSteam, opcoes) {
+    if (!modalEscolherJogoSteam || !escolherJogoSteamLista || !escolherJogoSteamSubtitulo) return;
+    const tituloEl = document.getElementById('escolherJogoSteamTituloTexto');
+    const tooltipEl = document.getElementById('escolherJogoSteamTooltip');
+    const rodapeEl = document.getElementById('escolherJogoSteamRodape');
+    const apenasVincular = opcoes?.apenasVincular && opcoes?.registroId && opcoes?.jogoLista;
+    if (apenasVincular) {
+        steamEscolherContexto = { nomeSteam, appid, imgSteam, apenasVincular: true, registroId: opcoes.registroId, jogoLista: opcoes.jogoLista };
+        if (tituloEl) tituloEl.textContent = 'Confirmar vínculo';
+        if (tooltipEl) tooltipEl.setAttribute('data-tooltip', "Este jogo da Steam foi identificado como correspondente a um da sua lista. <span class='tooltip-destaque'>Confirme</span> se é o correto antes de vincular.");
+        if (escolherJogoSteamSubtitulo) escolherJogoSteamSubtitulo.textContent = `Da Steam: ${nomeSteam}`;
+        if (rodapeEl) rodapeEl.style.display = 'none';
+        if (escolherJogoSteamLoading) escolherJogoSteamLoading.style.display = 'none';
+        const j = opcoes.jogoLista;
+        const nome = escapeHtml(j.nome || 'Sem nome');
+        const ano = (j.lancamento || '').slice(0, 4) || '—';
+        const img = j.imagem || '';
+        escolherJogoSteamLista.innerHTML = `<div class="escolher-jogo-steam-item escolher-jogo-steam-item-apenas-vincular"><img src="${escapeHtml(img)}" alt="${nome}" onerror="this.src='data:image/svg+xml,<svg xmlns=\\'http://www.w3.org/2000/svg\\' viewBox=\\'0 0 48 64\\' fill=\\'%23333\\'><rect width=\\'48\\' height=\\'64\\'/><text x=\\'50%\\' y=\\'50%\\' dominant-baseline=\\'middle\\' text-anchor=\\'middle\\' fill=\\'%23888\\' font-size=\\'10\\'>?</text></svg>'"><div class="escolher-jogo-steam-item-info"><span class="escolher-jogo-steam-item-nome">${nome}</span><span class="escolher-jogo-steam-item-ano">${ano}</span></div><button type="button" class="btn-vincular-escolher"><i class="fas fa-link"></i> Vincular</button></div>`;
+        modalEscolherJogoSteam.classList.add('ativo');
+        return;
+    }
+    steamEscolherContexto = { nomeSteam, appid, imgSteam };
+    if (tituloEl) tituloEl.textContent = 'Escolher jogo para vincular';
+    if (tooltipEl) tooltipEl.setAttribute('data-tooltip', "Escolha o jogo da base que corresponde ao da Steam para <span class='tooltip-destaque'>vincular e adicionar</span> à sua lista. Se não encontrar, use o botão abaixo para adicionar com o nome da Steam.");
+    if (escolherJogoSteamSubtitulo) escolherJogoSteamSubtitulo.textContent = `Da Steam: ${nomeSteam}`;
+    if (rodapeEl) rodapeEl.style.display = '';
+    if (btnEscolherJogoSteamFallback) btnEscolherJogoSteamFallback.textContent = `Usar "${nomeSteam}" (não encontrado na base)`;
+    escolherJogoSteamLista.innerHTML = '';
+    if (escolherJogoSteamLoading) escolherJogoSteamLoading.style.display = 'block';
+    modalEscolherJogoSteam.classList.add('ativo');
+    const resultados = await buscarJogosSemelhantesRawg(nomeSteam);
+    if (escolherJogoSteamLoading) escolherJogoSteamLoading.style.display = 'none';
+    if (resultados.length === 0) {
+        escolherJogoSteamLista.innerHTML = '<p class="steam-biblioteca-erro">Nenhum jogo semelhante encontrado na base. Use o botão abaixo para adicionar com o nome da Steam.</p>';
+    } else {
+        escolherJogoSteamLista.innerHTML = resultados.map(g => {
+            const nome = escapeHtml(g.name || 'Sem nome');
+            const ano = (g.released || '').slice(0, 4) || '—';
+            const img = g.background_image || '';
+            return `<div class="escolher-jogo-steam-item" data-id="${g.id}" data-nome="${escapeHtml(String(g.name || ''))}" data-imagem="${escapeHtml(img)}" data-lancamento="${escapeHtml(g.released || '')}"><img src="${escapeHtml(img)}" alt="${nome}" onerror="this.src='data:image/svg+xml,<svg xmlns=\\'http://www.w3.org/2000/svg\\' viewBox=\\'0 0 48 64\\' fill=\\'%23333\\'><rect width=\\'48\\' height=\\'64\\'/><text x=\\'50%\\' y=\\'50%\\' dominant-baseline=\\'middle\\' text-anchor=\\'middle\\' fill=\\'%23888\\' font-size=\\'10\\'>?</text></svg>'"><div class="escolher-jogo-steam-item-info"><span class="escolher-jogo-steam-item-nome">${nome}</span><span class="escolher-jogo-steam-item-ano">${ano}</span></div><button type="button" class="btn-vincular-escolher"><i class="fas fa-link"></i> Vincular e Adicionar</button></div>`;
+        }).join('');
+    }
+}
+
+async function obterBibliotecaSteam(steamId) {
+    if (!steamId) return [];
+    if (steamId === usuarioLogado?.steam_id && steamBibliotecaCache && steamBibliotecaCache.steamid === steamId && (Date.now() - steamBibliotecaCache.timestamp) < TTL_BIB_STEAM_POR_ID) {
+        return steamBibliotecaCache.jogos || [];
+    }
+    const c = steamBibliotecaPorSteamIdCache[steamId];
+    if (c && (Date.now() - c.timestamp) < TTL_BIB_STEAM_POR_ID) return c.jogos || [];
+    try {
+        const r = await fetch(`/api/steam-biblioteca?steamid=${encodeURIComponent(steamId)}`);
+        const data = await r.json();
+        const jogos = (r.ok && data.jogos) ? data.jogos : [];
+        steamBibliotecaPorSteamIdCache[steamId] = { jogos, timestamp: Date.now() };
+        return jogos;
+    } catch (e) {
+        return [];
+    }
+}
+
+async function atualizarHorasSteamDetalhes(steamId, steamAppId, contextoId = null) {
+    const el = document.getElementById('horasSteamDetalhes');
+    if (!el) return;
+    if (!steamId || !steamAppId) {
+        el.style.display = 'none';
+        el.textContent = '';
+        return;
+    }
+    let min = 0;
+    try {
+        const jogos = await obterBibliotecaSteam(steamId);
+        const j = jogos.find(x => String(x.appid) === String(steamAppId));
+        min = j ? (Number(j.playtime_forever) || 0) : 0;
+    } catch (e) {
+        min = 0;
+    }
+    if (contextoId != null && !isContextoDetalhesAtivo(contextoId)) return;
+    if (min <= 0) {
+        el.style.display = 'none';
+        el.textContent = '';
+        return;
+    }
+    let texto;
+    if (min < 60) {
+        texto = min === 1 ? '1 minuto jogado na Steam' : `${min} minutos jogados na Steam`;
+    } else {
+        const h = min / 60;
+        let numeroStr;
+        if (h >= 1000) numeroStr = String(Math.round(h));
+        else if (h === Math.floor(h)) numeroStr = String(Math.floor(h));
+        else numeroStr = h.toFixed(1);
+        texto = (numeroStr === '1' ? '1 hora jogada' : `${numeroStr} horas jogadas`) + ' na Steam';
+    }
+    el.textContent = ` • ${texto}`;
+    el.style.display = 'inline';
+}
+
+async function carregarBibliotecaSteam(opcoes) {
+    if (!steamBibliotecaLista || !steamBibliotecaLoading || !steamBibliotecaErro || !usuarioLogado?.steam_id) return;
+    const steamBibliotecaContador = document.getElementById('steamBibliotecaContador');
+    const sid = usuarioLogado.steam_id;
+    steamBibliotecaErro.style.display = 'none';
+    const TTL_BIB_STEAM = 2 * 60 * 1000;
+    if (steamBibliotecaCache && steamBibliotecaCache.steamid === sid && (Date.now() - steamBibliotecaCache.timestamp) < TTL_BIB_STEAM) {
+        steamBibliotecaLoading.style.display = 'none';
+        steamJogosCache = steamBibliotecaCache.jogos;
+        const meusJogos = await supabase.obterJogos(usuarioLogado.id, { forcarAtualizacao: false });
+        steamMeusJogosCache = meusJogos || [];
+        if (campoBuscaSteam) campoBuscaSteam.value = '';
+        if (steamBibliotecaContador) steamBibliotecaContador.textContent = steamJogosCache.length === 1 ? '1 jogo' : `${steamJogosCache.length} jogos`;
+        steamBibliotecaLista.innerHTML = renderizarSteamBiblioteca(steamJogosCache, steamMeusJogosCache);
+        if (opcoes && typeof opcoes.scrollPos === 'number' && steamBibliotecaLista) {
+            requestAnimationFrame(() => { steamBibliotecaLista.scrollTop = opcoes.scrollPos; });
+        }
+        return;
+    }
+    steamBibliotecaLista.innerHTML = gerarSkeletonGridHtml(12);
+    steamBibliotecaLoading.style.display = 'none';
+    if (steamBibliotecaContador) steamBibliotecaContador.textContent = '';
+    if (campoBuscaSteam) campoBuscaSteam.value = '';
+    steamBibliotecaCarregando = true;
+    try {
+        const [r, meusJogos] = await Promise.all([
+            fetch(`/api/steam-biblioteca?steamid=${encodeURIComponent(sid)}`),
+            supabase.obterJogos(usuarioLogado.id, { forcarAtualizacao: true })
+        ]);
+        const data = await r.json();
+        if (!r.ok) {
+            steamBibliotecaLista.innerHTML = '';
+            steamBibliotecaErro.textContent = data.erro || 'Erro ao carregar biblioteca.';
+            steamBibliotecaErro.style.display = 'block';
+            if (steamBibliotecaContador) steamBibliotecaContador.textContent = '';
+            return;
+        }
+        const jogos = data.jogos || [];
+        steamBibliotecaCache = { steamid: sid, jogos, timestamp: Date.now() };
+        steamJogosCache = jogos;
+        steamMeusJogosCache = meusJogos || [];
+        if (jogos.length === 0) {
+            steamBibliotecaLista.innerHTML = '<p class="steam-biblioteca-erro">Nenhum jogo na biblioteca.</p>';
+            if (steamBibliotecaContador) steamBibliotecaContador.textContent = '0 jogos';
+            return;
+        }
+        if (steamBibliotecaContador) steamBibliotecaContador.textContent = jogos.length === 1 ? '1 jogo' : `${jogos.length} jogos`;
+        steamBibliotecaLista.innerHTML = renderizarSteamBiblioteca(jogos, steamMeusJogosCache);
+        if (opcoes && typeof opcoes.scrollPos === 'number' && steamBibliotecaLista) {
+            requestAnimationFrame(() => { steamBibliotecaLista.scrollTop = opcoes.scrollPos; });
+        }
+    } catch (e) {
+        steamBibliotecaLista.innerHTML = '';
+        steamBibliotecaErro.textContent = 'Erro ao carregar biblioteca.';
+        steamBibliotecaErro.style.display = 'block';
+        if (steamBibliotecaContador) steamBibliotecaContador.textContent = '';
+    } finally {
+        steamBibliotecaCarregando = false;
+    }
+}
+
+function filtrarBibliotecaSteam() {
+    const termoRaw = (campoBuscaSteam?.value || '').trim();
+    const termo = termoRaw.toLowerCase();
+    const steamBibliotecaContador = document.getElementById('steamBibliotecaContador');
+    if (!steamBibliotecaLista || !steamBibliotecaContador) return;
+    if (steamBibliotecaCarregando) return;
+    const jogos = termo
+        ? steamJogosCache.filter(j => String(j.name || '').toLowerCase().includes(termo))
+        : steamJogosCache;
+    if (jogos.length === 0) {
+        steamBibliotecaLista.innerHTML = termo
+            ? `<p class="steam-biblioteca-erro">Nenhum jogo encontrado para "${escapeHtml(termoRaw)}".</p>`
+            : '<p class="steam-biblioteca-erro">Nenhum jogo na biblioteca.</p>';
+        steamBibliotecaContador.textContent = '0 jogos';
+        return;
+    }
+    steamBibliotecaContador.textContent = jogos.length === 1 ? '1 jogo' : `${jogos.length} jogos`;
+    steamBibliotecaLista.innerHTML = renderizarSteamBiblioteca(jogos, steamMeusJogosCache);
+    steamBibliotecaLista.scrollTop = 0;
+}
+
 function abrirModalAmigos() {
     modalAmigos.classList.add('ativo');
     carregarAmigos();
@@ -5607,14 +6125,153 @@ function abrirModalAmigos() {
 btnAmigos.addEventListener('click', abrirModalAmigos);
 
 btnFecharAmigos.addEventListener('click', () => {
-    modalAmigos.classList.remove('ativo');
+    fecharModalComAnimacao(modalAmigos);
 });
 
 modalAmigos.addEventListener('click', (e) => {
     if (e.target === modalAmigos) {
-        modalAmigos.classList.remove('ativo');
+        fecharModalComAnimacao(modalAmigos);
     }
 });
+
+if (btnSteam) {
+    btnSteam.addEventListener('click', abrirModalSteam);
+}
+if (btnFecharSteam) {
+    btnFecharSteam.addEventListener('click', () => fecharModalComAnimacao(modalSteam));
+}
+if (modalSteam) {
+    modalSteam.addEventListener('click', (e) => {
+        if (e.target === modalSteam) fecharModalComAnimacao(modalSteam);
+    });
+}
+if (btnFecharEscolherJogoSteam) {
+    btnFecharEscolherJogoSteam.addEventListener('click', fecharModalEscolherJogoSteam);
+}
+if (modalEscolherJogoSteam) {
+    modalEscolherJogoSteam.addEventListener('click', (e) => {
+        if (e.target === modalEscolherJogoSteam) fecharModalEscolherJogoSteam();
+        const item = e.target.closest('.escolher-jogo-steam-item');
+        if (item) {
+            if (steamEscolherContexto?.apenasVincular) {
+                aoConfirmarVincularSteam();
+                return;
+            }
+            const id = item.dataset.id;
+            const nome = item.dataset.nome;
+            const imagem = item.dataset.imagem || null;
+            const lancamento = item.dataset.lancamento || null;
+            if (id) aoEscolherJogoSteam({ id: Number(id), nome: nome || 'Sem nome', imagem, lancamento: lancamento || null });
+        }
+    });
+}
+if (btnEscolherJogoSteamFallback) {
+    btnEscolherJogoSteamFallback.addEventListener('click', () => aoEscolherJogoSteam(null));
+}
+if (steamBibliotecaLista) {
+    steamBibliotecaLista.addEventListener('scroll', () => {
+        if (!modalSteam?.classList.contains('ativo') || !modalSteam.classList.contains('modal-steam-tela-inteira')) return;
+        clearTimeout(steamScrollSaveTimeout);
+        steamScrollSaveTimeout = setTimeout(() => {
+            sessionStorage.setItem('steamBibliotecaScroll', String(steamBibliotecaLista.scrollTop));
+        }, 200);
+    });
+}
+if (campoBuscaSteam) {
+    campoBuscaSteam.addEventListener('input', filtrarBibliotecaSteam);
+}
+if (btnConectarSteam) {
+    btnConectarSteam.addEventListener('click', () => {
+        const origin = location.origin;
+        const returnTo = `${origin}/api/steam-callback?origin=${encodeURIComponent(origin)}`;
+        const params = new URLSearchParams({
+            'openid.ns': 'http://specs.openid.net/auth/2.0',
+            'openid.identity': 'http://specs.openid.net/auth/2.0/identifier_select',
+            'openid.claimed_id': 'http://specs.openid.net/auth/2.0/identifier_select',
+            'openid.return_to': returnTo,
+            'openid.realm': origin,
+            'openid.mode': 'checkid_setup'
+        });
+        location.href = `https://steamcommunity.com/openid/login?${params.toString()}`;
+    });
+}
+if (btnDesconectarSteam) {
+    btnDesconectarSteam.addEventListener('click', () => {
+        mostrarConfirmacao(
+            'Desconectar Steam',
+            'Desconectar sua conta Steam deste site? Os jogos da sua lista não serão apagados, mas perderão o vínculo com a Steam (badge, etc.).',
+            async () => {
+                try {
+                    await supabase.removerSteam(usuarioLogado.id);
+                    steamBibliotecaCache = null;
+                    usuarioLogado.steam_id = null;
+                    usuarioLogado.steam_nome = null;
+                    salvarUsuarioLogado(usuarioLogado);
+                    await obterJogosSalvos(true, true);
+                    fecharModalComAnimacao(modalSteam);
+                    mostrarNotificacao('Steam desconectada. Os jogos permanecem na sua lista e foram desvinculados da Steam.', 'sucesso');
+                } catch (e) {
+                    mostrarNotificacao(e.message || 'Erro ao desconectar.', 'erro');
+                }
+            }
+        );
+    });
+}
+
+if (steamBibliotecaLista) {
+    steamBibliotecaLista.addEventListener('click', async (e) => {
+        const btnDesvincular = e.target.closest('.btn-desvincular-steam-card');
+        if (btnDesvincular) {
+            const registroId = btnDesvincular.dataset.registroId;
+            if (!registroId) return;
+            const scrollSteam = steamBibliotecaLista ? steamBibliotecaLista.scrollTop : 0;
+            mostrarConfirmacao(
+                'Desvincular da Steam',
+                'Remover o vínculo deste jogo com a Steam? A badge e os recursos Steam não serão mais exibidos para ele.',
+                async () => {
+                    try {
+                        await supabase.atualizarJogo(registroId, { steam_appid: null });
+                        await obterJogosSalvos(true, true);
+                        await carregarBibliotecaSteam({ scrollPos: scrollSteam });
+                        mostrarNotificacao('Jogo desvinculado da Steam.', 'sucesso');
+                    } catch (err) {
+                        mostrarNotificacao(err.message || 'Erro ao desvincular.', 'erro');
+                    }
+                }
+            );
+            return;
+        }
+        const btnAdicionado = e.target.closest('.btn-steam-adicionado');
+        if (btnAdicionado) return;
+        const btnVincular = e.target.closest('.btn-vincular-steam');
+        if (btnVincular) {
+            const card = btnVincular.closest('.steam-jogo-card');
+            const appid = card?.dataset?.appid;
+            const nomeSteam = card?.querySelector('.steam-jogo-nome')?.textContent || 'Sem nome';
+            const imgSteam = card?.querySelector('img')?.src || `https://cdn.cloudflare.steamstatic.com/steam/apps/${appid}/header.jpg`;
+            if (!btnVincular.dataset.registroId || !appid) return;
+            abrirModalEscolherJogoSteam(nomeSteam, appid, imgSteam, {
+                apenasVincular: true,
+                registroId: btnVincular.dataset.registroId,
+                jogoLista: {
+                    nome: btnVincular.dataset.jogoNome || '',
+                    imagem: btnVincular.dataset.jogoImagem || null,
+                    lancamento: btnVincular.dataset.jogoLancamento || null
+                }
+            });
+            return;
+        }
+        const btnAdicionar = e.target.closest('.btn-steam-adicionar');
+        if (btnAdicionar) {
+            const card = btnAdicionar.closest('.steam-jogo-card');
+            const appid = card?.dataset?.appid || btnAdicionar.dataset?.appid;
+            const nome = card?.querySelector('.steam-jogo-nome')?.textContent || 'Sem nome';
+            const imgSteam = card?.querySelector('img')?.src || `https://cdn.cloudflare.steamstatic.com/steam/apps/${appid}/header.jpg`;
+            if (!appid) return;
+            abrirModalEscolherJogoSteam(nome, appid, imgSteam);
+        }
+    });
+}
 
 document.querySelectorAll('.tab-amigos').forEach(tab => {
     tab.addEventListener('click', () => {
@@ -5682,7 +6339,7 @@ function exibirAmigos(amigos) {
                     <span>${amigoNomeEscaped}</span>
                 </div>
                 <div class="amigo-acoes">
-                    <button class="btn-ver-lista" data-amigo-id="${amigo.id}" data-amigo-nome="${amigoNomeEscaped}">
+                    <button class="btn-ver-lista" data-amigo-id="${amigo.id}" data-amigo-nome="${amigoNomeEscaped}" data-amigo-steam-id="${amigo.steam_id || ''}">
                         <i class="fas fa-list"></i> Ver Lista
                     </button>
                     <button class="btn-remover-amigo" data-amizade-id="${amigo.amizade_id}">
@@ -5697,8 +6354,9 @@ function exibirAmigos(amigos) {
         btn.addEventListener('click', () => {
             const amigoId = btn.dataset.amigoId;
             const amigoNome = btn.dataset.amigoNome;
-            visualizarListaAmigo(amigoId, amigoNome);
-            modalAmigos.classList.remove('ativo');
+            const amigoSteamId = btn.dataset.amigoSteamId || null;
+            visualizarListaAmigo(amigoId, amigoNome, amigoSteamId);
+            fecharModalComAnimacao(modalAmigos);
         });
     });
     
@@ -5951,6 +6609,22 @@ function exibirEstatisticasCompatibilidade(estatisticas) {
                         <span class="estatistica-info-valor">${stat.jogos_com_avaliacao_comum}</span>
                     </div>
                     ` : ''}
+                    ${((stat.jogos_vinculados_steam_usuario || 0) > 0 || (stat.jogos_vinculados_steam_amigo || 0) > 0) ? `
+                    <div class="estatistica-info-item">
+                        <span class="estatistica-info-label"><i class="fab fa-steam" style="color:#66c0f4;"></i> Steam (você):</span>
+                        <span class="estatistica-info-valor">${stat.jogos_vinculados_steam_usuario || 0} vinculados</span>
+                    </div>
+                    <div class="estatistica-info-item">
+                        <span class="estatistica-info-label"><i class="fab fa-steam" style="color:#66c0f4;"></i> Steam (amigo):</span>
+                        <span class="estatistica-info-valor">${stat.jogos_vinculados_steam_amigo || 0} vinculados</span>
+                    </div>
+                    ${(stat.jogos_steam_comuns || 0) > 0 ? `
+                    <div class="estatistica-info-item">
+                        <span class="estatistica-info-label">Steam em comum:</span>
+                        <span class="estatistica-info-valor">${stat.jogos_steam_comuns} jogos</span>
+                    </div>
+                    ` : ''}
+                    ` : ''}
                 </div>
             </div>
         `;
@@ -5965,6 +6639,18 @@ async function carregarEstatisticasPessoais() {
     try {
         const jogos = await supabase.obterJogos(usuarioLogado.id, { forcarAtualizacao: true });
         const estatisticas = calcularEstatisticasPessoais(jogos);
+        estatisticas.jogosSteamNaLista = jogos.filter(j => j.steam_appid != null).length;
+        let totalHorasSteam = 0;
+        if (usuarioLogado?.steam_id && estatisticas.jogosSteamNaLista > 0) {
+            try {
+                const bib = await obterBibliotecaSteam(usuarioLogado.steam_id);
+                const appIds = new Set(jogos.filter(j => j.steam_appid != null).map(j => String(j.steam_appid)));
+                for (const g of bib) {
+                    if (appIds.has(String(g.appid))) totalHorasSteam += (Number(g.playtime_forever) || 0) / 60;
+                }
+            } catch (e) { totalHorasSteam = 0; }
+        }
+        estatisticas.totalHorasSteam = totalHorasSteam;
         
         exibirEstatisticasPessoais(estatisticas, []);
         
@@ -6233,6 +6919,26 @@ function exibirEstatisticasPessoais(stat, generos = []) {
                     <div class="dashboard-card-sub">${stat.jogosComAvaliacao} jogos avaliados</div>
                 </div>
             </div>
+            
+            <div class="dashboard-card">
+                <div class="dashboard-card-icon" style="background: rgba(102, 192, 244, 0.2); color: #66c0f4;">
+                    <i class="fab fa-steam"></i>
+                </div>
+                <div class="dashboard-card-content">
+                    <div class="dashboard-card-valor">${stat.jogosSteamNaLista ?? 0}</div>
+                    <div class="dashboard-card-label">Jogos Vinculados à Steam</div>
+                </div>
+            </div>
+            
+            <div class="dashboard-card">
+                <div class="dashboard-card-icon" style="background: rgba(102, 192, 244, 0.2); color: #66c0f4;">
+                    <i class="fas fa-clock"></i>
+                </div>
+                <div class="dashboard-card-content">
+                    <div class="dashboard-card-valor">${(stat.totalHorasSteam ?? 0) >= 1000 ? Math.round(stat.totalHorasSteam) + ' h' : (stat.totalHorasSteam ?? 0) >= 1 ? (stat.totalHorasSteam.toFixed(1).replace(/\\.0$/, '')) + ' h' : (stat.totalHorasSteam > 0 ? '< 1 h' : '—')}</div>
+                    <div class="dashboard-card-label">Horas Jogadas (Steam)</div>
+                </div>
+            </div>
         </div>
         
         <div class="dashboard-secao">
@@ -6479,11 +7185,13 @@ function inicializarTooltipsHistorico() {
         };
         
         const esconderTooltip = () => {
-            hideTimeout = setTimeout(() => {
-                tooltip.style.setProperty('display', 'none', 'important');
-                tooltip.style.setProperty('visibility', 'hidden', 'important');
-                isTooltipVisible = false;
-            }, 150);
+            if (hideTimeout) {
+                clearTimeout(hideTimeout);
+                hideTimeout = null;
+            }
+            tooltip.style.setProperty('display', 'none', 'important');
+            tooltip.style.setProperty('visibility', 'hidden', 'important');
+            isTooltipVisible = false;
         };
         
         const cancelarEsconder = () => {
@@ -6574,6 +7282,115 @@ function atualizarPosicaoTooltip(tooltip, container) {
     tooltip.classList.add(tooltipAcima ? 'tooltip-acima' : 'tooltip-abaixo');
 }
 
+let tooltipInformativoEl = null;
+let tooltipInformativoShowTimeout = null;
+let tooltipInformativoHideTimeout = null;
+let tooltipInformativoTrigger = null;
+let tooltipDuranteDrag = false;
+
+function obterTooltipInformativoElemento() {
+    if (!tooltipInformativoEl) {
+        tooltipInformativoEl = document.createElement('div');
+        tooltipInformativoEl.id = 'tooltip-informativo-global';
+        tooltipInformativoEl.className = 'tooltip-informativo';
+        tooltipInformativoEl.setAttribute('role', 'tooltip');
+        document.body.appendChild(tooltipInformativoEl);
+        tooltipInformativoEl.addEventListener('mouseenter', () => {
+            if (tooltipInformativoHideTimeout) {
+                clearTimeout(tooltipInformativoHideTimeout);
+                tooltipInformativoHideTimeout = null;
+            }
+        });
+        tooltipInformativoEl.addEventListener('mouseleave', esconderTooltipInformativo);
+    }
+    return tooltipInformativoEl;
+}
+
+function mostrarTooltipInformativo(trigger, conteudo) {
+    if (!conteudo || !trigger) return;
+    if (tooltipInformativoShowTimeout) {
+        clearTimeout(tooltipInformativoShowTimeout);
+        tooltipInformativoShowTimeout = null;
+    }
+    const el = obterTooltipInformativoElemento();
+    el.innerHTML = conteudo;
+    el.style.setProperty('display', 'block', 'important');
+    atualizarPosicaoTooltip(el, trigger);
+    el.style.setProperty('z-index', '100002', 'important');
+    tooltipInformativoTrigger = trigger;
+}
+
+function esconderTooltipInformativo() {
+    if (tooltipInformativoHideTimeout) {
+        clearTimeout(tooltipInformativoHideTimeout);
+        tooltipInformativoHideTimeout = null;
+    }
+    const el = obterTooltipInformativoElemento();
+    el.style.setProperty('display', 'none', 'important');
+    el.style.setProperty('visibility', 'hidden', 'important');
+    tooltipInformativoTrigger = null;
+}
+
+function esconderTooltipInformativoImediato() {
+    if (tooltipInformativoShowTimeout) {
+        clearTimeout(tooltipInformativoShowTimeout);
+        tooltipInformativoShowTimeout = null;
+    }
+    if (tooltipInformativoHideTimeout) {
+        clearTimeout(tooltipInformativoHideTimeout);
+        tooltipInformativoHideTimeout = null;
+    }
+    const el = tooltipInformativoEl || document.getElementById('tooltip-informativo-global');
+    if (el) {
+        el.style.setProperty('display', 'none', 'important');
+        el.style.setProperty('visibility', 'hidden', 'important');
+    }
+    tooltipInformativoTrigger = null;
+}
+
+function inicializarTooltipsInformativos() {
+    obterTooltipInformativoElemento();
+    document.addEventListener('mouseenter', (e) => {
+        if (tooltipDuranteDrag) return;
+        const trigger = e.target.closest('[data-tooltip]');
+        if (!trigger) return;
+        const conteudo = trigger.getAttribute('data-tooltip');
+        if (!conteudo) return;
+        if (tooltipInformativoHideTimeout) {
+            clearTimeout(tooltipInformativoHideTimeout);
+            tooltipInformativoHideTimeout = null;
+        }
+        if (tooltipInformativoShowTimeout) {
+            clearTimeout(tooltipInformativoShowTimeout);
+            tooltipInformativoShowTimeout = null;
+        }
+        mostrarTooltipInformativo(trigger, conteudo);
+    }, true);
+    document.addEventListener('mouseleave', (e) => {
+        const trigger = e.target.closest('[data-tooltip]');
+        const rel = e.relatedTarget;
+        if (trigger) {
+            if (rel && trigger.contains(rel)) return;
+            const el = tooltipInformativoEl || document.getElementById('tooltip-informativo-global');
+            if (el && rel && el.contains(rel)) return;
+            if (tooltipInformativoShowTimeout) {
+                clearTimeout(tooltipInformativoShowTimeout);
+                tooltipInformativoShowTimeout = null;
+            }
+            esconderTooltipInformativo();
+            return;
+        }
+        if (!tooltipInformativoTrigger) return;
+        const elTooltip = tooltipInformativoEl || document.getElementById('tooltip-informativo-global');
+        if (!elTooltip) return;
+        if (rel && (tooltipInformativoTrigger.contains(rel) || (elTooltip.contains && elTooltip.contains(rel)))) return;
+        if (rel && rel.closest && rel.closest('[data-tooltip]')) return;
+        esconderTooltipInformativoImediato();
+    }, true);
+}
+
+inicializarTooltipsInformativos();
+
 async function carregarComparacaoAmigos() {
     const conteudoComparacao = document.getElementById('conteudoComparacao');
     if (!conteudoComparacao) {
@@ -6599,10 +7416,10 @@ async function carregarComparacaoAmigos() {
         }
         
         const [minhasEstatisticas, estatisticasAmigos] = await Promise.all([
-            obterEstatisticasCompletas(usuarioLogado.id),
+            obterEstatisticasCompletas(usuarioLogado.id, { steamId: usuarioLogado.steam_id || null }),
             Promise.all(amigos.map(async (amigo) => {
                 try {
-                    const stats = await obterEstatisticasCompletas(amigo.id);
+                    const stats = await obterEstatisticasCompletas(amigo.id, { steamId: amigo.steam_id || null });
                     return {
                         ...amigo,
                         estatisticas: stats
@@ -6625,9 +7442,23 @@ async function carregarComparacaoAmigos() {
     }
 }
 
-async function obterEstatisticasCompletas(usuarioId) {
+async function obterEstatisticasCompletas(usuarioId, opts = {}) {
     const jogos = await supabase.obterJogos(usuarioId, { forcarAtualizacao: true });
-    return calcularEstatisticasPessoais(jogos);
+    const stat = calcularEstatisticasPessoais(jogos);
+    stat.jogosSteamNaLista = jogos.filter(j => j.steam_appid != null).length;
+    let totalHorasSteam = 0;
+    const steamId = opts.steamId;
+    if (steamId && stat.jogosSteamNaLista > 0) {
+        try {
+            const bib = await obterBibliotecaSteam(steamId);
+            const appIds = new Set(jogos.filter(j => j.steam_appid != null).map(j => String(j.steam_appid)));
+            for (const g of bib) {
+                if (appIds.has(String(g.appid))) totalHorasSteam += (Number(g.playtime_forever) || 0) / 60;
+            }
+        } catch (e) { totalHorasSteam = 0; }
+    }
+    stat.totalHorasSteam = totalHorasSteam;
+    return stat;
 }
 
 function exibirComparacaoAmigos(minhasEstatisticas, estatisticasAmigos) {
@@ -6699,6 +7530,8 @@ function exibirComparacaoAmigos(minhasEstatisticas, estatisticasAmigos) {
                             ${criarCardComparacao('Jogando Agora', minhasEstatisticas.jogosJogando, stats.jogosJogando, 'fas fa-play-circle', '#fbbf24')}
                             ${criarCardComparacao('Média de Avaliações', minhasEstatisticas.mediaAvaliacoes, stats.mediaAvaliacoes, 'fas fa-star', '#fbbf24', true)}
                             ${criarCardComparacao('Taxa de Conclusão', minhasEstatisticas.porcentagemZerados, stats.porcentagemZerados, 'fas fa-percentage', '#22c55e', true)}
+                            ${criarCardComparacao('Jogos Steam', minhasEstatisticas.jogosSteamNaLista ?? 0, stats.jogosSteamNaLista ?? 0, 'fab fa-steam', '#66c0f4')}
+                            ${criarCardComparacao('Horas Steam', minhasEstatisticas.totalHorasSteam ?? 0, stats.totalHorasSteam ?? 0, 'fas fa-clock', '#66c0f4', true)}
                         </div>
                         
                         <div class="comparacao-distribuicao">
@@ -6821,16 +7654,15 @@ function obterCorCompatibilidade(porcentagem) {
     return '#ef4444';
 }
 
-async function visualizarListaAmigo(amigoId, amigoNome) {
+async function visualizarListaAmigo(amigoId, amigoNome, steamId = null) {
     destruirOrdenacaoMinhaLista();
     const contextoId = criarNovoContextoLista();
-    amigoVisualizando = { id: amigoId, nome: amigoNome, contextoId };
+    amigoVisualizando = { id: amigoId, nome: amigoNome, steam_id: steamId || null, contextoId };
     tituloLista.textContent = `Lista de ${escapeHtml(amigoNome)}`;
     btnVoltarMinhaLista.style.display = 'flex';
     mostrarSkeletonContadores();
     
-    // Salvar no sessionStorage que está visualizando lista de amigo
-    sessionStorage.setItem('amigoVisualizando', JSON.stringify({ id: amigoId, nome: amigoNome }));
+    sessionStorage.setItem('amigoVisualizando', JSON.stringify({ id: amigoId, nome: amigoNome, steam_id: steamId || null }));
     
     // Resetar filtro para "todos" ao visualizar lista de amigo
     filtroAtual = 'todos';
@@ -6926,14 +7758,14 @@ if (btnEstatisticas) {
 
 if (btnFecharEstatisticas) {
     btnFecharEstatisticas.addEventListener('click', () => {
-        modalEstatisticas.classList.remove('ativo');
+        fecharModalComAnimacao(modalEstatisticas);
     });
 }
 
 if (modalEstatisticas) {
     modalEstatisticas.addEventListener('click', (e) => {
         if (e.target === modalEstatisticas) {
-            modalEstatisticas.classList.remove('ativo');
+            fecharModalComAnimacao(modalEstatisticas);
         }
     });
 }
@@ -7082,12 +7914,12 @@ if (menuItemUsuarioEl) {
 }
 
 btnFecharAtualizacoes.addEventListener('click', () => {
-    modalAtualizacoes.classList.remove('ativo');
+    fecharModalComAnimacao(modalAtualizacoes);
 });
 
 modalAtualizacoes.addEventListener('click', (e) => {
     if (e.target === modalAtualizacoes) {
-        modalAtualizacoes.classList.remove('ativo');
+        fecharModalComAnimacao(modalAtualizacoes);
     }
 });
 
@@ -7095,12 +7927,12 @@ modalAtualizacoes.addEventListener('click', (e) => {
 btnNotificacoes.addEventListener('click', abrirModalNotificacoes);
 
 btnFecharNotificacoes.addEventListener('click', () => {
-    modalNotificacoes.classList.remove('ativo');
+    fecharModalComAnimacao(modalNotificacoes);
 });
 
 modalNotificacoes.addEventListener('click', (e) => {
     if (e.target === modalNotificacoes) {
-        modalNotificacoes.classList.remove('ativo');
+        fecharModalComAnimacao(modalNotificacoes);
     }
 });
 
@@ -7300,7 +8132,7 @@ function exibirNotificacoes(notificacoes) {
             }
             
             // Fechar modal
-            modalNotificacoes.classList.remove('ativo');
+            fecharModalComAnimacao(modalNotificacoes);
             
             // Abrir detalhes do jogo
             if (jogoId && !isNaN(jogoId)) {
@@ -7546,7 +8378,7 @@ function abrirModalFotoPerfil() {
 }
 
 function fecharModalFotoPerfil() {
-    modalFotoPerfil.classList.remove('ativo');
+    fecharModalComAnimacao(modalFotoPerfil);
     inputFotoPerfil.value = '';
 }
 

@@ -107,8 +107,7 @@
 
 ### 🎮 Jogos
 
-- [ ] Importar jogos da Steam automaticamente via API
-- [ ] Estatísticas pessoais da Steam (tempo jogado, conquistas, etc)
+- [ ] Por hora concluido
 
 ### 👥 Social
 
@@ -216,8 +215,7 @@
 
 ## 🎯 UX/UI
 
-- [ ] Tooltips informativos em funcionalidades complexas
-- [ ] Mais animações suaves e transições
+- [ ] Por hora concluido
 
 ## 🐛 Bugs Conhecidos
 
