@@ -114,6 +114,10 @@
                         <i class="fas fa-bell"></i>
                         <span id="badgeNotificacoes" class="badge-notificacoes" style="display: none;"></span>
                     </button>
+                    <button id="btnFeedback" class="btn-header btn-feedback" data-tooltip="<span class='tooltip-destaque'>Sugira melhorias</span> ou reporte bugs. Sua opinião ajuda a melhorar o PlayShelf.">
+                        <i class="fas fa-lightbulb"></i> Sugerir / Reportar
+                        <span id="badgeFeedback" class="badge-notificacoes" style="display: none;"></span>
+                    </button>
                     <button id="btnEstatisticas" class="btn-header btn-estatisticas" data-tooltip="Métricas da sua biblioteca: totais, zerados, gêneros e <span class='tooltip-destaque'>histórico mensal</span>.">
                         <i class="fas fa-chart-bar"></i> Estatísticas
                     </button>
@@ -221,6 +225,11 @@
                     <i class="fas fa-bell"></i>
                     <span>Notificações</span>
                     <span id="badgeNotificacoesMenu" class="badge-notificacoes-menu" style="display: none;"></span>
+                </button>
+                <button class="menu-item-mobile" id="menuItemFeedback" data-tooltip="Sugira melhorias ou reporte bugs.">
+                    <i class="fas fa-lightbulb"></i>
+                    <span>Sugerir / Reportar</span>
+                    <span id="badgeFeedbackMenu" class="badge-notificacoes-menu" style="display: none;"></span>
                 </button>
                 <button class="menu-item-mobile" id="menuItemAmigos" data-tooltip="Amigos, listas e compatibilidade.">
                     <i class="fas fa-user-friends"></i>
@@ -445,6 +454,82 @@
         </div>
     </div>
 
+    <div id="modalFeedback" class="modal">
+        <div class="modal-conteudo modal-feedback">
+            <button class="btn-fechar-modal" id="btnFecharFeedback" aria-label="Fechar"><i class="fas fa-times"></i></button>
+            <h2><i class="fas fa-lightbulb"></i> Sugerir ou Reportar Bug</h2>
+            <div id="feedbackTabs" class="feedback-tabs" style="display: none;">
+                <button class="feedback-tab ativo" data-tab="enviar">Enviar</button>
+                <button class="feedback-tab" data-tab="painel">Painel <span id="feedbackPainelBadge" class="feedback-painel-badge">0</span></button>
+            </div>
+            <div id="feedbackAbaEnviar" class="feedback-aba">
+                <form id="formFeedback" class="form-feedback">
+                    <div class="form-group-feedback">
+                        <label for="feedbackTipo">Tipo</label>
+                        <select id="feedbackTipo" required>
+                            <option value="sugestao">Sugestão</option>
+                            <option value="bug">Reportar bug</option>
+                        </select>
+                    </div>
+                    <div class="form-group-feedback">
+                        <label for="feedbackTitulo">Título</label>
+                        <input type="text" id="feedbackTitulo" placeholder="Resumo objetivo" maxlength="200" required>
+                        <p class="contador-caracteres"><span id="contadorFeedbackTitulo">0</span>/200</p>
+                    </div>
+                    <div class="form-group-feedback">
+                        <label for="feedbackDescricao">Descrição (opcional)</label>
+                        <textarea id="feedbackDescricao" placeholder="Detalhes, passos para reproduzir, etc." maxlength="2000"></textarea>
+                        <p class="contador-caracteres"><span id="contadorFeedbackDescricao">0</span>/2000</p>
+                    </div>
+                    <div class="form-feedback-botoes">
+                        <button type="submit" class="btn-enviar-feedback"><i class="fas fa-paper-plane"></i> Enviar</button>
+                        <button type="button" id="btnCancelarFeedback" class="btn-cancelar-feedback">Cancelar</button>
+                    </div>
+                </form>
+            </div>
+            <div id="feedbackAbaPainel" class="feedback-aba feedback-aba-painel" style="display: none;">
+                <div class="feedback-painel-contadores">
+                    <div class="feedback-contador-item">
+                        <i class="fas fa-lightbulb"></i>
+                        <span class="feedback-contador-label">Sugestões</span>
+                        <span id="contadorSugestoes" class="feedback-contador-numero">0</span>
+                    </div>
+                    <div class="feedback-contador-item">
+                        <i class="fas fa-bug"></i>
+                        <span class="feedback-contador-label">Bugs</span>
+                        <span id="contadorBugs" class="feedback-contador-numero">0</span>
+                    </div>
+                </div>
+                <div class="feedback-painel-filtros">
+                    <select id="feedbackFiltroTipo">
+                        <option value="">Todos os tipos</option>
+                        <option value="sugestao">Sugestão</option>
+                        <option value="bug">Bug</option>
+                    </select>
+                    <select id="feedbackFiltroLido">
+                        <option value="">Todos</option>
+                        <option value="false">Não lidos</option>
+                        <option value="true">Lidos</option>
+                    </select>
+                    <select id="feedbackFiltroTag" aria-label="Filtrar por status (tag)">
+                        <option value="">Todas as tags</option>
+                        <option value="sem_tag">Sem tag</option>
+                        <option value="em_analise">Em análise</option>
+                        <option value="concluido">Concluído</option>
+                        <option value="aplicado">Aplicado</option>
+                        <option value="recusado">Recusado</option>
+                    </select>
+                    <div class="feedback-painel-busca">
+                        <input type="text" id="feedbackBusca" placeholder="Buscar em título e descrição..." autocomplete="off">
+                        <i class="fas fa-search"></i>
+                    </div>
+                    <button id="btnFeedbackMarcarTodasLidas" class="btn-feedback-marcar-todas"><i class="fas fa-check-double"></i> Marcar todas como lidas</button>
+                </div>
+                <div id="listaSugestoesReportes" class="lista-sugestoes-reportes"></div>
+            </div>
+        </div>
+    </div>
+
     <div id="modalEstatisticas" class="modal">
         <div class="modal-conteudo modal-estatisticas">
             <button class="btn-fechar-modal" id="btnFecharEstatisticas" aria-label="Fechar modal de estatísticas"><i class="fas fa-times"></i></button>
@@ -621,6 +706,10 @@
             <button class="screenshot-navegacao proxima" aria-label="Próximo screenshot" data-tooltip="Próxima foto"><i class="fas fa-chevron-right"></i></button>
         </div>
     </div>
+
+    <button id="btnVoltarAoTopo" class="btn-voltar-ao-topo" aria-label="Voltar ao topo" style="display: none;">
+        <i class="fas fa-chevron-up"></i>
+    </button>
 
     <script src="https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js"></script>
     <script src="supabase.js" defer></script>

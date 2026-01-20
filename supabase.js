@@ -4,6 +4,8 @@
 const SUPABASE_URL = 'https://hidnjnmpdajzfjmcflum.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhpZG5qbm1wZGFqemZqbWNmbHVtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM1MjAwMTUsImV4cCI6MjA3OTA5NjAxNX0.ZFC_0qkNkVBV2nntp-uFl8vkDtcE_a0qIzLlHksH1j8';
 
+var PLAY_SHELF_DONO_EMAIL = 'nickcarva31@gmail.com';
+
 // Cliente Supabase customizado usando REST API
 class SupabaseClient {
     constructor(url, key) {
@@ -1408,7 +1410,12 @@ class SupabaseClient {
             jogo_nome: item.avaliacao?.nome || null,
             resposta_texto: item.resposta?.texto || null,
             avaliacao_id: item.avaliacao_id,
-            resposta_id: item.resposta_id
+            resposta_id: item.resposta_id,
+            sugestao_reporte_id: item.sugestao_reporte_id || null,
+            feedback_tag: item.feedback_tag || null,
+            feedback_tag_anterior: item.feedback_tag_anterior || null,
+            feedback_titulo: item.feedback_titulo || '',
+            feedback_tipo: item.feedback_tipo || 'sugestao'
         }));
     }
 
@@ -1667,6 +1674,215 @@ class SupabaseClient {
             `${this.url}/rest/v1/fotos_jogos?jogo_id`
         ]);
         return true;
+    }
+
+    async criarSugestaoOuReporte(usuarioId, usuarioNome, { tipo, titulo, descricao }) {
+        if (!tipo || !['sugestao', 'bug'].includes(tipo)) {
+            throw new Error('Tipo inválido. Use "sugestao" ou "bug".');
+        }
+        if (!titulo || typeof titulo !== 'string') {
+            throw new Error('Título é obrigatório.');
+        }
+        const tituloLimpo = titulo.trim();
+        if (tituloLimpo.length < 3) {
+            throw new Error('Título deve ter no mínimo 3 caracteres.');
+        }
+        if (tituloLimpo.length > 200) {
+            throw new Error('Título não pode ter mais de 200 caracteres.');
+        }
+        let descricaoLimpa = null;
+        if (descricao && typeof descricao === 'string') {
+            descricaoLimpa = descricao.trim();
+            if (descricaoLimpa.length > 2000) {
+                throw new Error('Descrição não pode ter mais de 2000 caracteres.');
+            }
+            descricaoLimpa = descricaoLimpa.length > 0 ? descricaoLimpa : null;
+        }
+        const response = await fetch(`${this.url}/rest/v1/sugestoes_reportes`, {
+            method: 'POST',
+            headers: this.headers,
+            body: JSON.stringify({
+                tipo,
+                usuario_id: usuarioId,
+                titulo: tituloLimpo,
+                descricao: descricaoLimpa
+            })
+        });
+        if (!response.ok) {
+            const erroTexto = await response.text();
+            let erro;
+            try {
+                erro = JSON.parse(erroTexto);
+            } catch (e) {
+                erro = { message: erroTexto || 'Erro ao enviar.' };
+            }
+            throw new Error(erro.message || 'Erro ao enviar sugestão ou reporte.');
+        }
+        this._invalidarCacheGetPorPrefixo([`${this.url}/rest/v1/sugestoes_reportes`]);
+        const texto = await response.text();
+        if (texto && texto.trim()) {
+            try {
+                const dados = JSON.parse(texto);
+                return Array.isArray(dados) ? dados[0] : dados;
+            } catch (e) {
+                return { sucesso: true };
+            }
+        }
+        return { sucesso: true };
+    }
+
+    async obterSugestoesReportes({ tipo = null, lido = null, busca = '', tag = null } = {}) {
+        let query = `${this.url}/rest/v1/sugestoes_reportes?select=id,tipo,usuario_id,titulo,descricao,lido,tag,created_at,usuarios(usuario)&order=created_at.desc`;
+        if (tipo && ['sugestao', 'bug'].includes(tipo)) {
+            query += `&tipo=eq.${encodeURIComponent(tipo)}`;
+        }
+        if (lido === true) query += `&lido=eq.true`;
+        if (lido === false) query += `&lido=eq.false`;
+        if (tag === 'sem_tag') {
+            query += `&tag=is.null`;
+        } else if (tag && ['em_analise', 'concluido', 'aplicado', 'recusado'].includes(tag)) {
+            query += `&tag=eq.${encodeURIComponent(tag)}`;
+        }
+        const termo = (typeof busca === 'string' ? busca : '').replace(/[*%\\]/g, '').trim();
+        if (termo.length > 0) {
+            const padrao = '*' + termo + '*';
+            query += `&or=(titulo.ilike.${encodeURIComponent(padrao)},descricao.ilike.${encodeURIComponent(padrao)})`;
+        }
+        const dados = await this._buscarJsonGet(query, { ttlMs: 5000 });
+        return dados.map(item => ({
+            id: item.id,
+            tipo: item.tipo,
+            usuario_id: item.usuario_id,
+            usuario_nome: (item.usuarios && item.usuarios.usuario) ? item.usuarios.usuario : 'Usuário removido',
+            titulo: item.titulo,
+            descricao: item.descricao || '',
+            lido: !!item.lido,
+            tag: item.tag || null,
+            created_at: item.created_at
+        }));
+    }
+
+    async atualizarSugestaoReporteTag(id, tag, remetenteId) {
+        const res = await fetch(`${this.url}/rest/v1/sugestoes_reportes?id=eq.${id}&select=usuario_id,titulo,tipo,tag`, { method: 'GET', headers: this.headers });
+        if (!res.ok) throw new Error('Erro ao buscar item.');
+        const arr = await res.json();
+        if (!Array.isArray(arr) || arr.length === 0) throw new Error('Item não encontrado.');
+        const atual = arr[0];
+        const tagAnterior = atual.tag || null;
+        const tagNova = (tag && String(tag).trim()) ? String(tag).trim() : null;
+        const response = await fetch(`${this.url}/rest/v1/sugestoes_reportes?id=eq.${id}`, {
+            method: 'PATCH',
+            headers: this.headers,
+            body: JSON.stringify({ tag: tagNova })
+        });
+        if (!response.ok) {
+            const t = await response.text();
+            let e;
+            try { e = JSON.parse(t); } catch (_) { e = { message: t }; }
+            throw new Error(e.message || 'Erro ao atualizar tag.');
+        }
+        this._invalidarCacheGetPorPrefixo([`${this.url}/rest/v1/sugestoes_reportes`]);
+        if (tagNova !== tagAnterior && tagNova) {
+            await this.criarNotificacaoFeedback(atual.usuario_id, remetenteId, id, tagNova, tagAnterior, atual.titulo, atual.tipo);
+        }
+        return true;
+    }
+
+    async criarNotificacaoFeedback(destinatarioId, remetenteId, sugestaoReporteId, tag, tagAnterior, titulo, tipoFeedback) {
+        const body = {
+            destinatario_id: destinatarioId,
+            remetente_id: remetenteId,
+            avaliacao_id: null,
+            resposta_id: null,
+            sugestao_reporte_id: sugestaoReporteId,
+            feedback_tag: tag,
+            feedback_tag_anterior: tagAnterior || null,
+            feedback_titulo: titulo || '',
+            feedback_tipo: tipoFeedback || 'sugestao',
+            tipo: 'feedback_tag',
+            lida: false
+        };
+        const response = await fetch(`${this.url}/rest/v1/notificacoes`, { method: 'POST', headers: this.headers, body: JSON.stringify(body) });
+        if (!response.ok) {
+            const t = await response.text();
+            console.error('Erro ao criar notificação de feedback:', t);
+            if (/avaliacao_id|resposta_id|null value/i.test(t)) {
+                console.warn('Dica: se avaliacao_id ou resposta_id forem NOT NULL, rode no Supabase: ALTER TABLE notificacoes ALTER COLUMN avaliacao_id DROP NOT NULL; ALTER TABLE notificacoes ALTER COLUMN resposta_id DROP NOT NULL;');
+            }
+            return null;
+        }
+        return true;
+    }
+
+    async atualizarSugestaoReporteLido(id, lido) {
+        const response = await fetch(
+            `${this.url}/rest/v1/sugestoes_reportes?id=eq.${id}`,
+            {
+                method: 'PATCH',
+                headers: this.headers,
+                body: JSON.stringify({ lido: !!lido })
+            }
+        );
+        if (!response.ok) {
+            const erroTexto = await response.text();
+            throw new Error(erroTexto || 'Erro ao atualizar.');
+        }
+        this._invalidarCacheGetPorPrefixo([`${this.url}/rest/v1/sugestoes_reportes`]);
+        return true;
+    }
+
+    async marcarTodasSugestoesReportesComoLidas() {
+        const response = await fetch(
+            `${this.url}/rest/v1/sugestoes_reportes?lido=eq.false`,
+            {
+                method: 'PATCH',
+                headers: this.headers,
+                body: JSON.stringify({ lido: true })
+            }
+        );
+        if (!response.ok) {
+            throw new Error('Erro ao marcar todas como lidas.');
+        }
+        this._invalidarCacheGetPorPrefixo([`${this.url}/rest/v1/sugestoes_reportes`]);
+        return true;
+    }
+
+    async excluirSugestaoReporte(id) {
+        const response = await fetch(
+            `${this.url}/rest/v1/sugestoes_reportes?id=eq.${id}`,
+            { method: 'DELETE', headers: this.headers }
+        );
+        if (!response.ok) {
+            throw new Error('Erro ao excluir.');
+        }
+        this._invalidarCacheGetPorPrefixo([`${this.url}/rest/v1/sugestoes_reportes`]);
+        return true;
+    }
+
+    async contarSugestoesReportesNaoLidas() {
+        const url = `${this.url}/rest/v1/sugestoes_reportes?lido=eq.false&select=id`;
+        const dados = await this._buscarJsonGet(url, { ttlMs: 8000 });
+        return Array.isArray(dados) ? dados.length : 0;
+    }
+
+    async contarSugestoesEBugs() {
+        const statusFinalizados = ['concluido', 'aplicado', 'recusado'];
+        const urlSugestoes = `${this.url}/rest/v1/sugestoes_reportes?tipo=eq.sugestao&select=id,tag`;
+        const urlBugs = `${this.url}/rest/v1/sugestoes_reportes?tipo=eq.bug&select=id,tag`;
+        const [dadosSugestoes, dadosBugs] = await Promise.all([
+            this._buscarJsonGet(urlSugestoes, { ttlMs: 8000 }),
+            this._buscarJsonGet(urlBugs, { ttlMs: 8000 })
+        ]);
+        const sugestoesFiltradas = Array.isArray(dadosSugestoes) 
+            ? dadosSugestoes.filter(item => !item.tag || !statusFinalizados.includes(item.tag))
+            : [];
+        const bugsFiltrados = Array.isArray(dadosBugs)
+            ? dadosBugs.filter(item => !item.tag || !statusFinalizados.includes(item.tag))
+            : [];
+        return {
+            sugestoes: sugestoesFiltradas.length,
+            bugs: bugsFiltrados.length
+        };
     }
 }
 

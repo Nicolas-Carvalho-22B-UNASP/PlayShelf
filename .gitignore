@@ -12,6 +12,7 @@ $RECYCLE.BIN/
 # IDEs e Editores
 .vscode/
 .idea/
+.cursor/
 *.sublime-project
 *.sublime-workspace
 *.code-workspace
@@ -43,14 +44,24 @@ pnpm-lock.yaml
 .pnpm-store/
 
 # Arquivos de Ambiente e Configuração Sensível
+supabase.js
 .env
 .env.local
 .env.*.local
 .env.production
 .env.development
+.env.vercel
+.env.vercel.*
 *.key
 *.pem
 *.cert
+*.crt
+*-secrets.js
+*-secreto.js
+*-secrets.json
+*-secreto.json
+*.local.js
+config.local.json
 
 # Build e Distribuição
 dist/

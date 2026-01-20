@@ -150,6 +150,32 @@ let steamBibliotecaCarregando = false;
 let steamBibliotecaPorSteamIdCache = Object.create(null);
 const TTL_BIB_STEAM_POR_ID = 5 * 60 * 1000;
 
+const modalFeedback = document.getElementById('modalFeedback');
+const btnFecharFeedback = document.getElementById('btnFecharFeedback');
+const btnFeedback = document.getElementById('btnFeedback');
+const menuItemFeedback = document.getElementById('menuItemFeedback');
+const formFeedback = document.getElementById('formFeedback');
+const feedbackTabs = document.getElementById('feedbackTabs');
+const feedbackPainelBadge = document.getElementById('feedbackPainelBadge');
+const feedbackAbaEnviar = document.getElementById('feedbackAbaEnviar');
+const feedbackAbaPainel = document.getElementById('feedbackAbaPainel');
+const feedbackTipo = document.getElementById('feedbackTipo');
+const feedbackTitulo = document.getElementById('feedbackTitulo');
+const feedbackDescricao = document.getElementById('feedbackDescricao');
+const contadorFeedbackTitulo = document.getElementById('contadorFeedbackTitulo');
+const contadorFeedbackDescricao = document.getElementById('contadorFeedbackDescricao');
+const feedbackFiltroTipo = document.getElementById('feedbackFiltroTipo');
+const feedbackFiltroLido = document.getElementById('feedbackFiltroLido');
+const feedbackFiltroTag = document.getElementById('feedbackFiltroTag');
+const feedbackBusca = document.getElementById('feedbackBusca');
+const btnFeedbackMarcarTodasLidas = document.getElementById('btnFeedbackMarcarTodasLidas');
+const listaSugestoesReportes = document.getElementById('listaSugestoesReportes');
+const badgeFeedback = document.getElementById('badgeFeedback');
+const badgeFeedbackMenu = document.getElementById('badgeFeedbackMenu');
+const contadorSugestoes = document.getElementById('contadorSugestoes');
+const contadorBugs = document.getElementById('contadorBugs');
+let feedbackBuscaTimeout = null;
+
 // Variáveis de estado
 let jogoParaAdicionar = null;
 let modoEdicao = false;
@@ -194,6 +220,14 @@ const cacheMemoizacao = {
         return false;
     }
 };
+
+function ehDesktop() {
+    return window.matchMedia('(min-width: 769px)').matches;
+}
+
+function ehDono() {
+    return typeof PLAY_SHELF_DONO_EMAIL !== 'undefined' && PLAY_SHELF_DONO_EMAIL && usuarioLogado && usuarioLogado.email === PLAY_SHELF_DONO_EMAIL;
+}
 
 function criarChaveCache(...args) {
     return JSON.stringify(args);
@@ -909,8 +943,28 @@ async function garantirSortableCarregado() {
 }
 
 // Sistema de Atualizações
-const VERSAO_ATUAL = '1.9.0';
+const VERSAO_ATUAL = '1.10.0';
 const ATUALIZACOES = [
+    {
+        versao: '1.10.0',
+        data: '20/01/2026',
+        titulo: 'Integração Steam, Sugerir/Reportar e Refinamentos de UX',
+        itens: [
+            'Conecte sua conta Steam pelo botão na busca; login na janela oficial da Steam',
+            'Veja sua biblioteca Steam aqui no PlayShelf e adicione jogos direto na sua lista',
+            'Vincule jogos da sua lista com os da Steam; desvincule quando quiser',
+            'Adicione jogos que só existem na Steam; se não achar na base, use o nome da Steam',
+            'Badge Steam nos cards e nos detalhes; "Na biblioteca Steam dele" quando for jogo de amigo',
+            'Horas jogadas da Steam exibidas nos detalhes do jogo',
+            'Compatibilidade com amigos considera jogos da Steam',
+            'Sugira melhorias ou reporte bugs: botão no header e no menu',
+            'Envie sugestões ou reportes',
+            'Status das suas sugestões e reportes: em análise, concluído, aplicado, recusado',
+            'Notificação quando o status da sua sugestão ou do seu reporte mudar',
+            'Mais animações e fluidez na interface',
+            'Dicas (tooltips) em botões e campos para te orientar'
+        ]
+    },
     {
         versao: '1.9.0',
         data: '05/01/2026',
@@ -3015,7 +3069,7 @@ function abrirModalScreenshot(screenshots, index) {
     }
     
     modalScreenshot.classList.add('ativo');
-    document.body.style.overflow = 'hidden';
+    registrarModalAberto(modalScreenshot);
 }
 
 function fecharModalScreenshot() {
@@ -3030,7 +3084,6 @@ function fecharModalScreenshot() {
     }
     
     fecharModalComAnimacao(modalScreenshot);
-    document.body.style.overflow = 'auto';
     
     // Restaurar conteúdo original do modal
     if (modalConteudo && modalScreenshotHTMLOriginal) {
@@ -3165,7 +3218,7 @@ async function carregarFotosJogo(jogoId, contextoId = null, forcarAtualizacao = 
             const meuLike = fotoAtiva.meu_like;
             const contadorLikes = fotoAtiva.contador_likes || 0;
             const contadorDislikes = fotoAtiva.contador_dislikes || 0;
-            const acoesHTML = !amigoVisualizando ? `
+            const acoesHTML = jogoNaMinhaLista && !amigoVisualizando ? `
                 <div class="likes-dislikes-foto" data-foto-id="${fotoAtiva.id}">
                     <button class="btn-like-foto ${meuLike === 'like' ? 'ativo' : ''}" data-foto-id="${fotoAtiva.id}" aria-label="Curtir foto">
                         <i class="fas fa-thumbs-up"></i>
@@ -3574,7 +3627,11 @@ async function curtirFoto(fotoId, tipo, jogoId) {
         mostrarNotificacao('Você precisa estar logado!', 'erro');
         return;
     }
-    
+    const jogoNaMinhaLista = meusJogosCache.find(j => j.jogo_id === jogoId);
+    if (!jogoNaMinhaLista) {
+        mostrarNotificacao('Adicione o jogo à sua lista para curtir fotos.', 'erro');
+        return;
+    }
     const btnLike = listaFotosJogo.querySelector(`.btn-like-foto[data-foto-id="${fotoId}"]`);
     const btnDislike = listaFotosJogo.querySelector(`.btn-dislike-foto[data-foto-id="${fotoId}"]`);
     
@@ -3921,7 +3978,7 @@ async function exibirAvaliacoes(avaliacoes) {
             r => r.usuario_id === usuarioLogado.id && r.resposta_pai_id === null
         );
         
-        const podeResponder = usuarioLogado && !ehMinhaAvaliacao && !jaRespondeu && !amigoVisualizando;
+        const podeResponder = usuarioLogado && !ehMinhaAvaliacao && !jaRespondeu && !amigoVisualizando && jogoNaLista;
         
         const btnResponder = podeResponder ? 
             `<button class="btn-responder" data-avaliacao-id="${avaliacao.id}">
@@ -3939,7 +3996,7 @@ async function exibirAvaliacoes(avaliacoes) {
         const temLike = likeUsuario && likeUsuario.tipo === 'like';
         const temDislike = likeUsuario && likeUsuario.tipo === 'dislike';
         
-        const likesDislikesHTML = usuarioLogado && !amigoVisualizando ? `
+        const likesDislikesHTML = usuarioLogado && !amigoVisualizando && jogoNaLista ? `
             <div class="likes-dislikes">
                 <button class="btn-like ${temLike ? 'ativo' : ''}" data-avaliacao-id="${avaliacao.id}" data-tipo="like">
                     <i class="fas fa-thumbs-up"></i>
@@ -4160,6 +4217,7 @@ function obterIdUltimoAutorNaSubarvore(no) {
 }
 
 async function renderizarArvoreRespostas(respostas, avaliacaoId, nivel) {
+    const jogoNaLista = usuarioLogado && jogoDetalhesAtual && jogoJaAdicionado(jogoDetalhesAtual.id);
     const contadoresRespostas = await Promise.all(
         respostas.map(r => supabase.contarLikesDislikes(null, r.id))
     );
@@ -4170,7 +4228,7 @@ async function renderizarArvoreRespostas(respostas, avaliacaoId, nivel) {
         const ehMinhaResposta = usuarioLogado && usuarioLogado.id === resposta.usuario_id;
         const ultimoAutorId = obterIdUltimoAutorNaSubarvore(resposta);
         const euFuiOUltimo = usuarioLogado && ultimoAutorId === usuarioLogado.id;
-        const podeResponder = usuarioLogado && !ehMinhaResposta && !amigoVisualizando && !euFuiOUltimo;
+        const podeResponder = usuarioLogado && !ehMinhaResposta && !amigoVisualizando && !euFuiOUltimo && jogoNaLista;
         
         const respostaTextoEscaped = escapeHtml(resposta.texto);
         const respostaUsuarioNomeEscaped = escapeHtml(resposta.usuario_nome);
@@ -4195,7 +4253,7 @@ async function renderizarArvoreRespostas(respostas, avaliacaoId, nivel) {
         const temLike = likeUsuario && likeUsuario.tipo === 'like';
         const temDislike = likeUsuario && likeUsuario.tipo === 'dislike';
         
-        const likesDislikesHTML = usuarioLogado && !amigoVisualizando ? `
+        const likesDislikesHTML = usuarioLogado && !amigoVisualizando && jogoNaLista ? `
             <div class="likes-dislikes likes-dislikes-resposta">
                 <button class="btn-like ${temLike ? 'ativo' : ''}" data-resposta-id="${resposta.id}" data-tipo="like">
                     <i class="fas fa-thumbs-up"></i>
@@ -4327,29 +4385,29 @@ async function reativarBotaoResponder(avaliacaoId) {
     const temRespostaDireta = respostas.some(
         r => r.usuario_id === usuarioLogado.id && r.resposta_pai_id === null
     );
-    
-    if (!temRespostaDireta) {
-        // Criar e adicionar o botão novamente
+    const jogoNaLista = usuarioLogado && jogoDetalhesAtual && jogoJaAdicionado(jogoDetalhesAtual.id);
+    if (!temRespostaDireta && jogoNaLista) {
         const btnResponder = document.createElement('button');
         btnResponder.className = 'btn-responder';
         btnResponder.dataset.avaliacaoId = avaliacaoId;
         btnResponder.innerHTML = '<i class="fas fa-reply"></i> Responder';
-        
         btnResponder.addEventListener('click', () => {
             abrirFormularioResposta(avaliacaoId);
         });
-        
         avaliacaoFooter.insertBefore(btnResponder, avaliacaoFooter.firstChild);
     }
 }
 
 function abrirFormularioResposta(avaliacaoId) {
+    const jogoNaLista = usuarioLogado && jogoDetalhesAtual && jogoJaAdicionado(jogoDetalhesAtual.id);
+    if (!jogoNaLista) {
+        mostrarNotificacao('Adicione o jogo à sua lista para responder.', 'erro');
+        return;
+    }
     const container = document.getElementById(`respostas-${avaliacaoId}`);
-    
     if (container.querySelector('.form-resposta')) {
         return;
     }
-    
     const form = document.createElement('div');
     form.className = 'form-resposta';
     form.innerHTML = `
@@ -4464,8 +4522,12 @@ function abrirFormularioEdicaoResposta(respostaId, avaliacaoId, textoAtual) {
 }
 
 function abrirFormularioRespostaThread(respostaPaiId, avaliacaoId, autorResposta) {
+    const jogoNaLista = usuarioLogado && jogoDetalhesAtual && jogoJaAdicionado(jogoDetalhesAtual.id);
+    if (!jogoNaLista) {
+        mostrarNotificacao('Adicione o jogo à sua lista para responder.', 'erro');
+        return;
+    }
     const formContainer = document.getElementById(`form-resposta-${respostaPaiId}`);
-    
     // Fechar outros formulários abertos na mesma avaliação
     const container = document.getElementById(`respostas-${avaliacaoId}`);
     container.querySelectorAll('.form-resposta').forEach(f => f.remove());
@@ -5452,12 +5514,18 @@ document.getElementById('formLoginCompleto').addEventListener('submit', async (e
         mostrarNotificacao(`Bem-vindo, ${usuario.usuario}!`, 'sucesso');
         atualizarInterfaceUsuario();
         atualizarBadgeFotoPerfil();
+        atualizarContadorSolicitacoes();
+        atualizarContadorNotificacoes();
+        atualizarBadgeSolicitacoes();
+        carregarContagemNaoLidasFeedback();
+        setTimeout(verificarNovasAtualizacoes, 500);
+        setInterval(() => {
+            atualizarContadorSolicitacoes();
+            atualizarContadorNotificacoes();
+            atualizarBadgeSolicitacoes();
+            carregarContagemNaoLidasFeedback();
+        }, 30000);
         await exibirMinhaLista();
-        
-        // Verificar e abrir Exchange Log após login (com delay para garantir DOM pronto)
-        setTimeout(() => {
-            verificarNovasAtualizacoes();
-        }, 500);
         
         document.getElementById('formLoginCompleto').reset();
         const loginSenhaInput = document.getElementById('loginSenhaTela');
@@ -5566,7 +5634,18 @@ inicializarDelegacaoDetalhes();
 if (usuarioLogado) {
     (async () => {
         atualizarBadgeFotoPerfil();
-        
+        atualizarContadorSolicitacoes();
+        atualizarContadorNotificacoes();
+        atualizarBadgeSolicitacoes();
+        carregarContagemNaoLidasFeedback();
+        setTimeout(verificarNovasAtualizacoes, 500);
+        setInterval(() => {
+            atualizarContadorSolicitacoes();
+            atualizarContadorNotificacoes();
+            atualizarBadgeSolicitacoes();
+            carregarContagemNaoLidasFeedback();
+        }, 30000);
+
         // Verificar se estava visualizando lista de amigo
         const amigoSalvo = sessionStorage.getItem('amigoVisualizando');
         const jogoDetalhesAberto = sessionStorage.getItem('jogoDetalhesAberto');
@@ -5629,21 +5708,6 @@ if (usuarioLogado) {
                 }, 300);
             }
         }
-        
-        atualizarContadorSolicitacoes();
-        atualizarContadorNotificacoes();
-        atualizarBadgeSolicitacoes();
-        
-        // Verificar e abrir Exchange Log na inicialização (com delay para garantir DOM pronto)
-        setTimeout(() => {
-            verificarNovasAtualizacoes();
-        }, 500);
-        
-        // Atualizar notificações e solicitações a cada 30 segundos
-        setInterval(() => {
-            atualizarContadorNotificacoes();
-            atualizarBadgeSolicitacoes();
-        }, 30000);
     })();
 }
 
@@ -5707,14 +5771,83 @@ function verificarNovasAtualizacoes() {
     }
 }
 
+let modaisAbertos = new Set();
+let menuMobileAberto = false;
+
+function registrarModalAberto(modal) {
+    if (!modal) return;
+    const modalId = modal.id || `modal-${Date.now()}`;
+    modaisAbertos.add(modalId);
+    gerenciarScrollLock();
+}
+
+function gerenciarScrollLock() {
+    const temModalOuMenuAberto = modaisAbertos.size > 0 || menuMobileAberto;
+    
+    if (temModalOuMenuAberto) {
+        const scrollY = window.scrollY || document.documentElement.scrollTop;
+        document.body.style.position = 'fixed';
+        document.body.style.top = `-${scrollY}px`;
+        document.body.style.width = '100%';
+        document.body.style.overflow = 'hidden';
+        document.documentElement.style.overflow = 'hidden';
+        window.history.scrollRestoration = 'manual';
+        
+        // Salvar posição do scroll para restaurar depois
+        document.body.setAttribute('data-scroll-y', scrollY.toString());
+    } else {
+        const scrollY = document.body.getAttribute('data-scroll-y') || document.body.style.top;
+        const scrollYNum = scrollY ? parseInt(scrollY.toString().replace('-', '').replace('px', '')) : 0;
+        
+        // Restaurar estilos
+        document.body.style.position = '';
+        document.body.style.top = '';
+        document.body.style.width = '';
+        document.body.style.overflow = '';
+        document.documentElement.style.overflow = '';
+        document.body.removeAttribute('data-scroll-y');
+        
+        window.history.scrollRestoration = 'auto';
+        
+        // Restaurar posição do scroll usando requestAnimationFrame para garantir que os estilos foram aplicados
+        requestAnimationFrame(() => {
+            window.scrollTo(0, scrollYNum);
+            // Forçar scroll novamente no próximo frame para garantir
+            requestAnimationFrame(() => {
+                window.scrollTo(0, scrollYNum);
+            });
+        });
+    }
+}
+
 function fecharModalComAnimacao(modal) {
     if (!modal || !modal.classList.contains('ativo')) return;
+    
+    const modalId = modal.id || `modal-${Date.now()}`;
+    modaisAbertos.delete(modalId);
+    
+    // Remover bloqueio de scroll IMEDIATAMENTE, não esperar animação
+    gerenciarScrollLock();
+    
+    // Desabilitar pointer-events durante a animação para evitar bloqueio
+    modal.style.pointerEvents = 'none';
+    
     modal.classList.add('fechando');
     setTimeout(() => {
         modal.classList.remove('ativo', 'fechando');
+        modal.style.pointerEvents = '';
+        
         if (modal === modalSteam) {
             sessionStorage.removeItem('steamModalBiblioteca');
             sessionStorage.removeItem('steamBibliotecaScroll');
+        }
+        
+        if (modal === modalScreenshot) {
+            const modalConteudo = modal.querySelector('.modal-screenshot-conteudo');
+            if (modalConteudo && modalScreenshotHTMLOriginal) {
+                modalConteudo.innerHTML = modalScreenshotHTMLOriginal;
+            }
+            modalCurrentSlideRef = null;
         }
     }, 200);
 }
@@ -6121,6 +6254,124 @@ function abrirModalAmigos() {
     carregarAmigos();
 }
 
+function abrirModalFeedback() {
+    if (!usuarioLogado) return;
+    if (!modalFeedback) return;
+    document.querySelectorAll('.feedback-tab').forEach(t => t.classList.remove('ativo'));
+    document.querySelector('.feedback-tab[data-tab="enviar"]')?.classList.add('ativo');
+    feedbackAbaEnviar.style.display = 'block';
+    feedbackAbaPainel.style.display = 'none';
+    if (feedbackTabs) {
+        feedbackTabs.style.display = ehDono() ? 'flex' : 'none';
+    }
+    if (ehDono()) {
+        carregarContagemNaoLidasFeedback();
+    }
+    if (formFeedback) {
+        formFeedback.reset();
+        if (contadorFeedbackTitulo) contadorFeedbackTitulo.textContent = '0';
+        if (contadorFeedbackDescricao) contadorFeedbackDescricao.textContent = '0';
+    }
+    modalFeedback.classList.add('ativo');
+    registrarModalAberto(modalFeedback);
+}
+
+async function carregarContagemNaoLidasFeedback() {
+    if (!ehDono()) {
+        if (badgeFeedback) badgeFeedback.style.display = 'none';
+        if (badgeFeedbackMenu) badgeFeedbackMenu.style.display = 'none';
+        return;
+    }
+    try {
+        const n = await supabase.contarSugestoesReportesNaoLidas();
+        if (feedbackPainelBadge) {
+            feedbackPainelBadge.textContent = String(n);
+            feedbackPainelBadge.style.display = n > 0 ? 'inline-block' : 'none';
+        }
+        if (badgeFeedback) {
+            badgeFeedback.textContent = n > 9 ? '9+' : String(n);
+            badgeFeedback.style.display = n > 0 ? 'inline-block' : 'none';
+        }
+        if (badgeFeedbackMenu) {
+            badgeFeedbackMenu.textContent = n > 9 ? '9+' : String(n);
+            badgeFeedbackMenu.style.display = n > 0 ? 'inline-block' : 'none';
+        }
+    } catch (e) {
+        if (feedbackPainelBadge) { feedbackPainelBadge.textContent = '0'; feedbackPainelBadge.style.display = 'none'; }
+        if (badgeFeedback) badgeFeedback.style.display = 'none';
+        if (badgeFeedbackMenu) badgeFeedbackMenu.style.display = 'none';
+    }
+}
+
+async function carregarContadoresSugestoesBugs() {
+    if (!ehDono()) {
+        if (contadorSugestoes) contadorSugestoes.textContent = '0';
+        if (contadorBugs) contadorBugs.textContent = '0';
+        return;
+    }
+    try {
+        const contadores = await supabase.contarSugestoesEBugs();
+        if (contadorSugestoes) contadorSugestoes.textContent = String(contadores.sugestoes);
+        if (contadorBugs) contadorBugs.textContent = String(contadores.bugs);
+    } catch (e) {
+        if (contadorSugestoes) contadorSugestoes.textContent = '0';
+        if (contadorBugs) contadorBugs.textContent = '0';
+    }
+}
+
+async function carregarListaFeedback() {
+    if (!listaSugestoesReportes || !ehDono()) return;
+    const tipo = feedbackFiltroTipo && feedbackFiltroTipo.value ? feedbackFiltroTipo.value : null;
+    let lido = null;
+    if (feedbackFiltroLido && feedbackFiltroLido.value === 'true') lido = true;
+    if (feedbackFiltroLido && feedbackFiltroLido.value === 'false') lido = false;
+    const tag = feedbackFiltroTag && feedbackFiltroTag.value ? feedbackFiltroTag.value : null;
+    const busca = feedbackBusca && feedbackBusca.value ? feedbackBusca.value.trim() : '';
+    try {
+        const itens = await supabase.obterSugestoesReportes({ tipo, lido, busca, tag });
+        if (itens.length === 0) {
+            listaSugestoesReportes.innerHTML = '<div class="sem-sugestoes-reportes"><i class="fas fa-inbox"></i><p>Nenhum item encontrado.</p></div>';
+            return;
+        }
+        const labelTag = (s) => ({ em_analise: 'Em análise', concluido: 'Concluído', aplicado: 'Aplicado', recusado: 'Recusado' }[s] || s);
+        listaSugestoesReportes.innerHTML = itens.map(item => {
+            const dataStr = formatarDataCompleta(item.created_at);
+            const desc = escapeHtml(item.descricao || '');
+            const tit = escapeHtml(item.titulo || '');
+            const autor = escapeHtml(item.usuario_nome || '');
+            const lidoClasse = item.lido ? ' feedback-item-lido' : '';
+            const tagVal = item.tag || '';
+            const selectClasse = 'feedback-select-tag' + (tagVal ? ' feedback-select-tag--' + tagVal : '');
+            const pillHtml = tagVal ? `<span class="feedback-tag-pill feedback-tag-pill--${tagVal}">${labelTag(tagVal)}</span>` : '';
+            return `<div class="feedback-item${lidoClasse}" data-id="${item.id}">
+                <div class="feedback-item-header">
+                    <span class="feedback-item-tipo ${item.tipo}">${item.tipo === 'bug' ? 'Bug' : 'Sugestão'}</span>
+                    <span class="feedback-item-titulo">${tit}</span>
+                    ${pillHtml}
+                </div>
+                <div class="feedback-item-meta">${autor} · ${dataStr}</div>
+                ${desc ? `<div class="feedback-item-descricao">${desc}</div>` : ''}
+                <div class="feedback-item-tag-row">
+                    <label class="feedback-item-tag-label">Status:</label>
+                    <select class="${selectClasse}" data-id="${item.id}" aria-label="Alterar status da sugestão ou reporte">
+                        <option value=""${tagVal === '' ? ' selected' : ''}>— Nenhuma —</option>
+                        <option value="em_analise"${tagVal === 'em_analise' ? ' selected' : ''}>Em análise</option>
+                        <option value="concluido"${tagVal === 'concluido' ? ' selected' : ''}>Concluído</option>
+                        <option value="aplicado"${tagVal === 'aplicado' ? ' selected' : ''}>Aplicado</option>
+                        <option value="recusado"${tagVal === 'recusado' ? ' selected' : ''}>Recusado</option>
+                    </select>
+                </div>
+                <div class="feedback-item-acoes">
+                    <button type="button" class="btn-feedback-lido" data-id="${item.id}" data-lido="${item.lido}">${item.lido ? 'Marcar como não lido' : 'Marcar como lido'}</button>
+                    <button type="button" class="btn-feedback-excluir" data-id="${item.id}">Excluir</button>
+                </div>
+            </div>`;
+        }).join('');
+    } catch (e) {
+        listaSugestoesReportes.innerHTML = '<div class="sem-sugestoes-reportes"><i class="fas fa-exclamation-triangle"></i><p>Erro ao carregar. Tente novamente.</p></div>';
+    }
+}
+
 // Event listeners para amigos
 btnAmigos.addEventListener('click', abrirModalAmigos);
 
@@ -6133,6 +6384,166 @@ modalAmigos.addEventListener('click', (e) => {
         fecharModalComAnimacao(modalAmigos);
     }
 });
+
+if (btnFeedback) {
+    btnFeedback.addEventListener('click', abrirModalFeedback);
+}
+if (menuItemFeedback) {
+    menuItemFeedback.addEventListener('click', () => {
+        fecharMenuMobile();
+        abrirModalFeedback();
+    });
+}
+if (modalFeedback) {
+    if (btnFecharFeedback) btnFecharFeedback.addEventListener('click', () => fecharModalComAnimacao(modalFeedback));
+    modalFeedback.addEventListener('click', (e) => {
+        if (e.target === modalFeedback) {
+            fecharModalComAnimacao(modalFeedback);
+        }
+    });
+    // Prevenir que eventos de touch no overlay bloqueiem scroll após fechar
+    modalFeedback.addEventListener('touchmove', (e) => {
+        if (!modalFeedback.classList.contains('ativo')) {
+            e.stopPropagation();
+        }
+    }, { passive: true });
+}
+if (formFeedback) {
+    formFeedback.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (!usuarioLogado) return;
+        const tipo = feedbackTipo?.value || 'sugestao';
+        const titulo = (feedbackTitulo?.value || '').trim();
+        if (titulo.length < 3) {
+            mostrarNotificacao('Título deve ter no mínimo 3 caracteres.', 'erro');
+            return;
+        }
+        const descricao = (feedbackDescricao?.value || '').trim() || null;
+        const btnEnviar = formFeedback.querySelector('button[type="submit"]');
+        if (btnEnviar) btnEnviar.disabled = true;
+        try {
+            await supabase.criarSugestaoOuReporte(usuarioLogado.id, usuarioLogado.usuario, { tipo, titulo, descricao });
+            mostrarNotificacao('Enviado com sucesso! Obrigado pela contribuição.', 'sucesso');
+            formFeedback.reset();
+            if (contadorFeedbackTitulo) contadorFeedbackTitulo.textContent = '0';
+            if (contadorFeedbackDescricao) contadorFeedbackDescricao.textContent = '0';
+            if (ehDono()) {
+                carregarContagemNaoLidasFeedback();
+                carregarContadoresSugestoesBugs();
+            }
+        } catch (erro) {
+            mostrarNotificacao(erro.message || 'Erro ao enviar.', 'erro');
+        } finally {
+            if (btnEnviar) btnEnviar.disabled = false;
+        }
+    });
+}
+if (document.getElementById('btnCancelarFeedback')) {
+    document.getElementById('btnCancelarFeedback').addEventListener('click', () => fecharModalComAnimacao(modalFeedback));
+}
+if (feedbackTabs) {
+    feedbackTabs.addEventListener('click', (e) => {
+        const tab = e.target.closest('.feedback-tab');
+        if (!tab) return;
+        const tabName = tab.dataset.tab;
+        document.querySelectorAll('.feedback-tab').forEach(t => t.classList.remove('ativo'));
+        tab.classList.add('ativo');
+        if (tabName === 'painel') {
+            feedbackAbaEnviar.style.display = 'none';
+            feedbackAbaPainel.style.display = 'flex';
+            carregarListaFeedback();
+            carregarContadoresSugestoesBugs();
+        } else {
+            feedbackAbaEnviar.style.display = 'block';
+            feedbackAbaPainel.style.display = 'none';
+        }
+    });
+}
+if (feedbackTitulo) {
+    feedbackTitulo.addEventListener('input', () => {
+        if (contadorFeedbackTitulo) contadorFeedbackTitulo.textContent = String((feedbackTitulo.value || '').length);
+    });
+}
+if (feedbackDescricao) {
+    feedbackDescricao.addEventListener('input', () => {
+        if (contadorFeedbackDescricao) contadorFeedbackDescricao.textContent = String((feedbackDescricao.value || '').length);
+    });
+}
+if (feedbackFiltroTipo) {
+    feedbackFiltroTipo.addEventListener('change', carregarListaFeedback);
+}
+if (feedbackFiltroLido) {
+    feedbackFiltroLido.addEventListener('change', carregarListaFeedback);
+}
+if (feedbackFiltroTag) {
+    feedbackFiltroTag.addEventListener('change', carregarListaFeedback);
+}
+if (feedbackBusca) {
+    feedbackBusca.addEventListener('input', () => {
+        clearTimeout(feedbackBuscaTimeout);
+        feedbackBuscaTimeout = setTimeout(carregarListaFeedback, 300);
+    });
+}
+if (btnFeedbackMarcarTodasLidas) {
+    btnFeedbackMarcarTodasLidas.addEventListener('click', async () => {
+        try {
+            await supabase.marcarTodasSugestoesReportesComoLidas();
+            mostrarNotificacao('Todas marcadas como lidas.', 'sucesso');
+            carregarListaFeedback();
+            carregarContagemNaoLidasFeedback();
+            carregarContadoresSugestoesBugs();
+        } catch (e) {
+            mostrarNotificacao(e.message || 'Erro.', 'erro');
+        }
+    });
+}
+if (listaSugestoesReportes) {
+    listaSugestoesReportes.addEventListener('click', async (e) => {
+        const btnLido = e.target.closest('.btn-feedback-lido');
+        const btnExcluir = e.target.closest('.btn-feedback-excluir');
+        if (btnLido) {
+            const id = btnLido.dataset.id;
+            const lidoAtual = btnLido.dataset.lido === 'true';
+            try {
+                await supabase.atualizarSugestaoReporteLido(id, !lidoAtual);
+                carregarListaFeedback();
+                carregarContagemNaoLidasFeedback();
+                mostrarNotificacao(lidoAtual ? 'Marcado como não lido.' : 'Marcado como lido.', 'sucesso');
+            } catch (erro) {
+                mostrarNotificacao(erro.message || 'Erro.', 'erro');
+            }
+            return;
+        }
+        if (btnExcluir) {
+            const id = btnExcluir.dataset.id;
+            mostrarConfirmacao('Excluir', 'Excluir este item? Essa ação não pode ser desfeita.', async () => {
+                try {
+                    await supabase.excluirSugestaoReporte(id);
+                    carregarListaFeedback();
+                    carregarContagemNaoLidasFeedback();
+                    carregarContadoresSugestoesBugs();
+                    mostrarNotificacao('Item excluído.', 'sucesso');
+                } catch (erro) {
+                    mostrarNotificacao(erro.message || 'Erro ao excluir.', 'erro');
+                }
+            });
+        }
+    });
+    listaSugestoesReportes.addEventListener('change', async (e) => {
+        const sel = e.target.closest('.feedback-select-tag');
+        if (!sel || !usuarioLogado) return;
+        const id = sel.dataset.id;
+        const tag = sel.value || null;
+        try {
+            await supabase.atualizarSugestaoReporteTag(id, tag, usuarioLogado.id);
+            carregarListaFeedback();
+            carregarContadoresSugestoesBugs();
+            mostrarNotificacao(tag ? 'Status atualizado. O autor será notificado.' : 'Status removido.', 'sucesso');
+        } catch (erro) {
+            mostrarNotificacao(erro.message || 'Erro ao atualizar status.', 'erro');
+        }
+    });
+}
 
 if (btnSteam) {
     btnSteam.addEventListener('click', abrirModalSteam);
@@ -6182,17 +6593,23 @@ if (campoBuscaSteam) {
 }
 if (btnConectarSteam) {
     btnConectarSteam.addEventListener('click', () => {
-        const origin = location.origin;
-        const returnTo = `${origin}/api/steam-callback?origin=${encodeURIComponent(origin)}`;
-        const params = new URLSearchParams({
-            'openid.ns': 'http://specs.openid.net/auth/2.0',
-            'openid.identity': 'http://specs.openid.net/auth/2.0/identifier_select',
-            'openid.claimed_id': 'http://specs.openid.net/auth/2.0/identifier_select',
-            'openid.return_to': returnTo,
-            'openid.realm': origin,
-            'openid.mode': 'checkid_setup'
-        });
-        location.href = `https://steamcommunity.com/openid/login?${params.toString()}`;
+        mostrarConfirmacao(
+            'Conectar à Steam',
+            'Para que o sistema funcione por completo: deixe a visualização da sua biblioteca Steam como pública e, nas configurações de privacidade do seu perfil na Steam, desmarque a opção de não exibir o tempo jogado.',
+            () => {
+                const origin = location.origin;
+                const returnTo = `${origin}/api/steam-callback?origin=${encodeURIComponent(origin)}`;
+                const params = new URLSearchParams({
+                    'openid.ns': 'http://specs.openid.net/auth/2.0',
+                    'openid.identity': 'http://specs.openid.net/auth/2.0/identifier_select',
+                    'openid.claimed_id': 'http://specs.openid.net/auth/2.0/identifier_select',
+                    'openid.return_to': returnTo,
+                    'openid.realm': origin,
+                    'openid.mode': 'checkid_setup'
+                });
+                location.href = `https://steamcommunity.com/openid/login?${params.toString()}`;
+            }
+        );
     });
 }
 if (btnDesconectarSteam) {
@@ -7169,6 +7586,7 @@ function inicializarTooltipsHistorico() {
         };
         
         const mostrarTooltip = () => {
+            if (!ehDesktop()) return;
             if (hideTimeout) {
                 clearTimeout(hideTimeout);
                 hideTimeout = null;
@@ -7351,6 +7769,7 @@ function esconderTooltipInformativoImediato() {
 function inicializarTooltipsInformativos() {
     obterTooltipInformativoElemento();
     document.addEventListener('mouseenter', (e) => {
+        if (!ehDesktop()) return;
         if (tooltipDuranteDrag) return;
         const trigger = e.target.closest('[data-tooltip]');
         if (!trigger) return;
@@ -7390,6 +7809,25 @@ function inicializarTooltipsInformativos() {
 }
 
 inicializarTooltipsInformativos();
+inicializarBotaoVoltarAoTopo();
+
+function inicializarBotaoVoltarAoTopo() {
+    const btn = document.getElementById('btnVoltarAoTopo');
+    if (!btn) return;
+    const limiar = 400;
+    function atualizarVisibilidade() {
+        if (!ehDesktop()) {
+            btn.style.display = 'none';
+            return;
+        }
+        btn.style.display = window.scrollY > limiar ? 'flex' : 'none';
+    }
+    window.addEventListener('scroll', atualizarVisibilidade, { passive: true });
+    btn.addEventListener('click', () => {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+    atualizarVisibilidade();
+}
 
 async function carregarComparacaoAmigos() {
     const conteudoComparacao = document.getElementById('conteudoComparacao');
@@ -7851,14 +8289,28 @@ function abrirModalEstatisticas() {
 function abrirMenuMobile() {
     if (menuLateralMobile) {
         menuLateralMobile.classList.add('ativo');
-        document.body.style.overflow = 'hidden';
+        menuMobileAberto = true;
+        gerenciarScrollLock();
     }
 }
 
 function fecharMenuMobile() {
     if (menuLateralMobile) {
         menuLateralMobile.classList.remove('ativo');
-        document.body.style.overflow = 'auto';
+        menuMobileAberto = false;
+        gerenciarScrollLock();
+        
+        // Forçar remoção de qualquer estado residual que possa estar bloqueando scroll
+        requestAnimationFrame(() => {
+            if (!modaisAbertos.size && !menuMobileAberto) {
+                document.body.style.position = '';
+                document.body.style.top = '';
+                document.body.style.width = '';
+                document.body.style.overflow = '';
+                document.documentElement.style.overflow = '';
+                document.body.removeAttribute('data-scroll-y');
+            }
+        });
     }
 }
 
@@ -8052,52 +8504,55 @@ function exibirNotificacoes(notificacoes) {
         return;
     }
     
+    const labelTagFeedback = (s) => ({ em_analise: 'Em análise', concluido: 'Concluído', aplicado: 'Aplicado', recusado: 'Recusado' }[s] || s);
+    
     listaNotificacoes.innerHTML = notificacoes.map(notif => {
+        const isFeedback = notif.tipo === 'feedback_tag';
         const remetenteNomeEscaped = escapeHtml(notif.remetente_nome);
         const remetenteFotoEscaped = notif.remetente_foto ? escapeHtml(notif.remetente_foto) : '';
-        const avatarHTML = notif.remetente_foto 
-            ? `<img src="${remetenteFotoEscaped}" alt="${remetenteNomeEscaped}" class="notificacao-avatar">`
-            : `<div class="notificacao-avatar-placeholder"><i class="fas fa-user-circle"></i></div>`;
-        
-        // Truncar texto da resposta se for muito longo
-        const textoResposta = notif.resposta_texto ? 
-            (notif.resposta_texto.length > 100 ? 
-                escapeHtml(notif.resposta_texto.substring(0, 100)) + '...' : 
-                escapeHtml(notif.resposta_texto)) : '';
-        
-        // Determinar o texto da notificação baseado no tipo
-        let textoNotificacao = '';
-        if (notif.tipo === 'resposta_resposta') {
-            textoNotificacao = `<strong>${remetenteNomeEscaped}</strong> respondeu sua resposta`;
+        let avatarHTML;
+        let textoNotificacao;
+        let jogoLine = '';
+        let comentarioLine = '';
+        if (isFeedback) {
+            avatarHTML = '<div class="notificacao-avatar-placeholder notificacao-avatar-equipe"><i class="fas fa-lightbulb"></i></div>';
+            const tipoSR = notif.feedback_tipo === 'bug' ? 'reporte' : 'sugestão';
+            const tit = escapeHtml(notif.feedback_titulo || '');
+            const tagLabel = labelTagFeedback(notif.feedback_tag);
+            const tagSlug = (notif.feedback_tag || '').replace(/[^a-z_]/g, '') || 'em_analise';
+            const pillHtml = `<span class="notificacao-tag-pill notificacao-tag-pill--${tagSlug}">${tagLabel}</span>`;
+            if (notif.feedback_tag_anterior) {
+                textoNotificacao = `O status da sua <strong>${tipoSR}</strong> «${tit}» foi atualizado para ${pillHtml}`;
+            } else {
+                textoNotificacao = `Sua <strong>${tipoSR}</strong> «${tit}» foi marcada como ${pillHtml} pela equipe`;
+            }
         } else {
-            textoNotificacao = `<strong>${remetenteNomeEscaped}</strong> respondeu sua avaliação`;
+            avatarHTML = notif.remetente_foto 
+                ? `<img src="${remetenteFotoEscaped}" alt="${remetenteNomeEscaped}" class="notificacao-avatar">`
+                : `<div class="notificacao-avatar-placeholder"><i class="fas fa-user-circle"></i></div>`;
+            if (notif.tipo === 'resposta_resposta') {
+                textoNotificacao = `<strong>${remetenteNomeEscaped}</strong> respondeu sua resposta`;
+            } else {
+                textoNotificacao = `<strong>${remetenteNomeEscaped}</strong> respondeu sua avaliação`;
+            }
+            const textoResposta = notif.resposta_texto ? (notif.resposta_texto.length > 100 ? escapeHtml(notif.resposta_texto.substring(0, 100)) + '...' : escapeHtml(notif.resposta_texto)) : '';
+            jogoLine = `<p class="notificacao-jogo"><i class="fas fa-gamepad"></i> ${escapeHtml(notif.jogo_nome || 'Jogo')}</p>`;
+            comentarioLine = textoResposta ? `<div class="notificacao-comentario">"${textoResposta}"</div>` : '';
         }
-        
+        const dataAttrs = isFeedback ? `data-notificacao-id="${notif.id}" data-jogo-id="" data-feedback="1"` : `data-notificacao-id="${notif.id}" data-jogo-id="${notif.jogo_id || ''}"`;
         return `
-            <div class="notificacao-item ${!notif.lida ? 'nao-lida' : ''}" data-notificacao-id="${notif.id}" data-jogo-id="${notif.jogo_id}">
+            <div class="notificacao-item ${!notif.lida ? 'nao-lida' : ''}" ${dataAttrs}>
                 ${!notif.lida ? '<span class="notificacao-badge-nova">NOVA</span>' : ''}
                 <div class="notificacao-item-header">
                     ${avatarHTML}
                     <div class="notificacao-conteudo">
-                        <p class="notificacao-texto">
-                            ${textoNotificacao}
-                        </p>
-                        <p class="notificacao-jogo">
-                            <i class="fas fa-gamepad"></i> ${escapeHtml(notif.jogo_nome || 'Jogo')}
-                        </p>
-                        ${textoResposta ? `
-                            <div class="notificacao-comentario">
-                                "${textoResposta}"
-                            </div>
-                        ` : ''}
-                        <span class="notificacao-data">
-                            <i class="fas fa-clock"></i> ${formatarDataCompleta(notif.created_at)}
-                        </span>
+                        <p class="notificacao-texto">${textoNotificacao}</p>
+                        ${jogoLine}
+                        ${comentarioLine}
+                        <span class="notificacao-data"><i class="fas fa-clock"></i> ${formatarDataCompleta(notif.created_at)}</span>
                     </div>
                 </div>
-                <button class="btn-marcar-lida" data-notificacao-id="${notif.id}" title="Marcar como lida">
-                    <i class="fas fa-check"></i>
-                </button>
+                <button class="btn-marcar-lida" data-notificacao-id="${notif.id}" title="Marcar como lida"><i class="fas fa-check"></i></button>
             </div>
         `;
     }).join('');
@@ -8134,8 +8589,9 @@ function exibirNotificacoes(notificacoes) {
             // Fechar modal
             fecharModalComAnimacao(modalNotificacoes);
             
-            // Abrir detalhes do jogo
-            if (jogoId && !isNaN(jogoId)) {
+            if (item.dataset.feedback === '1') {
+                abrirModalFeedback();
+            } else if (jogoId && !isNaN(jogoId)) {
                 abrirModalDetalhes(jogoId);
             }
         });
@@ -8500,7 +8956,11 @@ async function toggleLikeDislike(avaliacaoId, respostaId, tipo) {
         mostrarNotificacao('Você precisa estar logado!', 'erro');
         return;
     }
-    
+    const jogoNaLista = jogoDetalhesAtual && jogoJaAdicionado(jogoDetalhesAtual.id);
+    if (!jogoNaLista) {
+        mostrarNotificacao('Adicione o jogo à sua lista para interagir.', 'erro');
+        return;
+    }
     try {
         await supabase.salvarLikeDislike(usuarioLogado.id, tipo, avaliacaoId, respostaId);
         

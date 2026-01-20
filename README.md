@@ -6,6 +6,9 @@ Aplicação web para organizar e gerenciar sua biblioteca pessoal de jogos de PC
 
 ### 🎯 Gerenciamento de Jogos
 - Busca de jogos via API RAWG
+- Integração Steam: conecte sua conta pelo botão na busca (login na janela oficial), veja sua biblioteca e adicione jogos direto na lista
+- Vincule ou desvincule jogos da sua lista com os da Steam; adicione jogos que só existem na Steam (use o nome da Steam se não achar na base)
+- Badge Steam nos cards e nos detalhes; horas jogadas da Steam exibidas nos detalhes do jogo
 - Organização por status (Quero Jogar, Jogando, Zerado, Dropado)
 - Avaliação com estrelas (1-5) e comentários personalizados
 - Filtros dinâmicos e busca na lista pessoal
@@ -25,6 +28,7 @@ Aplicação web para organizar e gerenciar sua biblioteca pessoal de jogos de PC
 
 ### 👥 Sistema Social
 - Sistema completo de amigos
+- Compatibilidade com amigos considera jogos vinculados à Steam; "Na biblioteca Steam dele" para jogos de amigos
 - Solicitações de amizade por nick
 - Visualizar lista de jogos dos amigos
 - Avaliações públicas visíveis para todos
@@ -51,6 +55,9 @@ Aplicação web para organizar e gerenciar sua biblioteca pessoal de jogos de PC
 - Classificação de compatibilidade (Excelente, Boa, Média, Baixa) com cores visuais
 
 ### 🔔 Interface e Experiência
+- Sugerir melhorias ou reportar bugs: botão no header e no menu; envie sugestões ou reportes, com status (em análise, concluído, aplicado, recusado) e notificação quando o status mudar
+- Tooltips (dicas) em botões e campos para orientar o uso
+- Mais animações e fluidez na interface
 - Sistema de atualizações/changelog com exibição automática
 - Sistema de notificações em tempo real para respostas em avaliações
 - Contador de notificações não lidas no header
@@ -82,7 +89,7 @@ Aplicação web para organizar e gerenciar sua biblioteca pessoal de jogos de PC
 
 - **Frontend**: HTML5, CSS3, JavaScript (Vanilla)
 - **Backend**: Supabase (PostgreSQL)
-- **APIs**: RAWG (jogos), Google Translate (tradução)
+- **APIs**: RAWG (jogos), Google Translate (tradução), Steam (login OpenID e biblioteca de jogos)
 - **Ícones**: Font Awesome 6.5.1
 - **PWA**: Service Worker para cache offline e melhor performance
 - **Web Workers**: Processamento em background (ordenação e processamento de texto)
@@ -93,17 +100,20 @@ Aplicação web para organizar e gerenciar sua biblioteca pessoal de jogos de PC
 
 ```
 PlayShelf/
-├── index.html              # Estrutura HTML principal
-├── styles.css              # Estilos e design responsivo
-├── script.js               # Lógica da aplicação
-├── supabase.js             # Cliente Supabase customizado
-├── sw.js                   # Service Worker (PWA e cache offline)
-├── worker-sort.js          # Web Worker para ordenação de jogos
+├── api/
+│   ├── steam-biblioteca.js  # API serverless: biblioteca de jogos da Steam
+│   └── steam-callback.js    # API serverless: callback do login Steam (OpenID)
+├── index.html               # Estrutura HTML principal
+├── styles.css               # Estilos e design responsivo
+├── script.js                # Lógica da aplicação
+├── supabase.js              # Cliente Supabase customizado
+├── sw.js                    # Service Worker (PWA e cache offline)
+├── worker-sort.js           # Web Worker para ordenação de jogos
 ├── worker-process-text.js   # Web Worker para processamento de texto
-├── manifest.webmanifest    # Manifesto PWA
-├── .gitignore              # Arquivos ignorados pelo Git
-├── README.md               # Documentação do projeto
-└── NOTAS.md                # Notas de desenvolvimento e roadmap
+├── manifest.webmanifest     # Manifesto PWA
+├── .gitignore               # Arquivos ignorados pelo Git
+├── README.md                # Documentação do projeto
+└── NOTAS.md                 # Notas de desenvolvimento e roadmap
 ```
 
 ## ⚡ Performance e Otimizações
@@ -149,12 +159,10 @@ PlayShelf/
 
 ## 📊 Versão Atual
 
-**v1.9.0** - Dashboard de Estatísticas, Fotos de Jogos e Comparação Social (05/01/2026)
-- Dashboard completo de estatísticas pessoais com métricas detalhadas
-- Sistema de comparação e compatibilidade com amigos
-- Sistema completo de fotos de jogos da comunidade
-- Edição de respostas próprias
-- Histórico mensal de adição de jogos
+**v1.10.0** - Integração Steam, Sugerir/Reportar e Refinamentos de UX (20/01/2026)
+- Integração Steam: conectar conta, biblioteca, vincular/desvincular e adicionar jogos
+- Sugerir melhorias ou reportar bugs, com status e notificação quando mudar
+- Mais animações, fluidez e tooltips em botões e campos
 
 ## 📜 Changelog
 

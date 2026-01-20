@@ -2,6 +2,21 @@
 
 ## 📊 Changelog Completo
 
+### v1.10.0 - Integração Steam, Sugerir/Reportar e Refinamentos de UX (20/01/2026)
+- ✅ Conecte sua conta Steam pelo botão na busca; login na janela oficial da Steam
+- ✅ Veja sua biblioteca Steam aqui no PlayShelf e adicione jogos direto na sua lista
+- ✅ Vincule jogos da sua lista com os da Steam; desvincule quando quiser
+- ✅ Adicione jogos que só existem na Steam; se não achar na base, use o nome da Steam
+- ✅ Badge Steam nos cards e nos detalhes; "Na biblioteca Steam dele" quando for jogo de amigo
+- ✅ Horas jogadas da Steam exibidas nos detalhes do jogo
+- ✅ Compatibilidade com amigos considera jogos da Steam
+- ✅ Sugira melhorias ou reporte bugs: botão no header e no menu
+- ✅ Envie sugestões ou reportes
+- ✅ Status das suas sugestões e reportes: em análise, concluído, aplicado, recusado
+- ✅ Notificação quando o status da sua sugestão ou do seu reporte mudar
+- ✅ Mais animações e fluidez na interface
+- ✅ Dicas (tooltips) em botões e campos para te orientar
+
 ### v1.9.0 - Dashboard de Estatísticas, Fotos de Jogos e Comparação Social (05/01/2026)
 - ✅ Dashboard completo de estatísticas pessoais com métricas detalhadas
 - ✅ Visualização de total de jogos e distribuição por status
@@ -229,6 +244,6 @@ Nenhum bug crítico identificado no momento.
 
 ---
 
-**Última atualização**: 05/01/2026 - v1.9.0
+**Última atualização**: 20/01/2026 - v1.10.0
 
 **Status do Projeto**: 🟢 Ativo e funcional
