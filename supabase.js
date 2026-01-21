@@ -1398,25 +1398,52 @@ class SupabaseClient {
         }
 
         const dados = await response.json();
-        return dados.map(item => ({
-            id: item.id,
-            tipo: item.tipo,
-            lida: item.lida,
-            created_at: item.created_at,
-            remetente_id: item.remetente_id,
-            remetente_nome: item.remetente?.usuario || 'Usuário',
-            remetente_foto: item.remetente?.foto_perfil || null,
-            jogo_id: item.avaliacao?.jogo_id || null,
-            jogo_nome: item.avaliacao?.nome || null,
-            resposta_texto: item.resposta?.texto || null,
-            avaliacao_id: item.avaliacao_id,
-            resposta_id: item.resposta_id,
-            sugestao_reporte_id: item.sugestao_reporte_id || null,
-            feedback_tag: item.feedback_tag || null,
-            feedback_tag_anterior: item.feedback_tag_anterior || null,
-            feedback_titulo: item.feedback_titulo || '',
-            feedback_tipo: item.feedback_tipo || 'sugestao'
+        
+        const notificacoesComRespostasFeedback = await Promise.all(dados.map(async (item) => {
+            let respostaFeedbackTexto = null;
+            if (item.resposta_feedback_id && (item.tipo === 'feedback_resposta' || item.tipo === 'feedback_resposta_editada')) {
+                try {
+                    const respostaResponse = await fetch(
+                        `${this.url}/rest/v1/respostas_feedback?id=eq.${item.resposta_feedback_id}&select=texto`,
+                        {
+                            method: 'GET',
+                            headers: this.headers
+                        }
+                    );
+                    if (respostaResponse.ok) {
+                        const respostaData = await respostaResponse.json();
+                        if (respostaData && respostaData.length > 0) {
+                            respostaFeedbackTexto = respostaData[0].texto || null;
+                        }
+                    }
+                } catch (e) {
+                    console.warn('Erro ao buscar texto da resposta de feedback:', e);
+                }
+            }
+            
+            return {
+                id: item.id,
+                tipo: item.tipo,
+                lida: item.lida,
+                created_at: item.created_at,
+                remetente_id: item.remetente_id,
+                remetente_nome: item.remetente?.usuario || 'Usuário',
+                remetente_foto: item.remetente?.foto_perfil || null,
+                jogo_id: item.avaliacao?.jogo_id || null,
+                jogo_nome: item.avaliacao?.nome || null,
+                resposta_texto: item.resposta?.texto || respostaFeedbackTexto || null,
+                avaliacao_id: item.avaliacao_id,
+                resposta_id: item.resposta_id,
+                resposta_feedback_id: item.resposta_feedback_id || null,
+                sugestao_reporte_id: item.sugestao_reporte_id || null,
+                feedback_tag: item.feedback_tag || null,
+                feedback_tag_anterior: item.feedback_tag_anterior || null,
+                feedback_titulo: item.feedback_titulo || '',
+                feedback_tipo: item.feedback_tipo || 'sugestao'
+            };
         }));
+        
+        return notificacoesComRespostasFeedback;
     }
 
     async marcarNotificacaoComoLida(notificacaoId) {
@@ -1883,6 +1910,138 @@ class SupabaseClient {
             sugestoes: sugestoesFiltradas.length,
             bugs: bugsFiltrados.length
         };
+    }
+
+    async criarRespostaFeedback(sugestaoReporteId, texto, remetenteId) {
+        if (!sugestaoReporteId) throw new Error('ID da sugestão/reporte é obrigatório.');
+        if (!texto || typeof texto !== 'string') throw new Error('Texto da resposta é obrigatório.');
+        const textoLimpo = texto.trim();
+        if (textoLimpo.length < 3) throw new Error('A resposta deve ter no mínimo 3 caracteres.');
+        if (textoLimpo.length > 2000) throw new Error('A resposta não pode ter mais de 2000 caracteres.');
+        const response = await fetch(`${this.url}/rest/v1/respostas_feedback`, {
+            method: 'POST',
+            headers: this.headers,
+            body: JSON.stringify({
+                sugestao_reporte_id: sugestaoReporteId,
+                texto: textoLimpo,
+                usuario_id: remetenteId
+            })
+        });
+        if (!response.ok) {
+            const erroTexto = await response.text();
+            let erro;
+            try {
+                erro = JSON.parse(erroTexto);
+            } catch (e) {
+                erro = { message: erroTexto || 'Erro ao criar resposta.' };
+            }
+            throw new Error(erro.message || 'Erro ao criar resposta.');
+        }
+        this._invalidarCacheGetPorPrefixo([`${this.url}/rest/v1/respostas_feedback`]);
+        const textoResposta = await response.text();
+        if (textoResposta && textoResposta.trim()) {
+            try {
+                const dados = JSON.parse(textoResposta);
+                const resposta = Array.isArray(dados) ? dados[0] : dados;
+                const sugestaoReporte = await this._buscarJsonGet(`${this.url}/rest/v1/sugestoes_reportes?id=eq.${sugestaoReporteId}&select=usuario_id,titulo,tipo`, { ttlMs: 5000 });
+                if (sugestaoReporte && sugestaoReporte.length > 0) {
+                    const item = sugestaoReporte[0];
+                    await this.criarNotificacaoRespostaFeedback(item.usuario_id, remetenteId, sugestaoReporteId, resposta.id, item.titulo, item.tipo, false);
+                }
+                return resposta;
+            } catch (e) {
+                return { sucesso: true };
+            }
+        }
+        return { sucesso: true };
+    }
+
+    async obterRespostasFeedback(sugestaoReporteId) {
+        if (!sugestaoReporteId) return [];
+        const query = `${this.url}/rest/v1/respostas_feedback?sugestao_reporte_id=eq.${sugestaoReporteId}&select=id,texto,usuario_id,created_at,updated_at,usuarios(usuario,foto_perfil)&order=created_at.asc`;
+        const dados = await this._buscarJsonGet(query, { ttlMs: 5000 });
+        return dados.map(item => ({
+            id: item.id,
+            texto: item.texto || '',
+            usuario_id: item.usuario_id,
+            usuario_nome: (item.usuarios && item.usuarios.usuario) ? item.usuarios.usuario : 'Usuário removido',
+            usuario_foto: (item.usuarios && item.usuarios.foto_perfil) ? item.usuarios.foto_perfil : null,
+            created_at: item.created_at,
+            updated_at: item.updated_at
+        }));
+    }
+
+    async editarRespostaFeedback(respostaId, novoTexto, remetenteId) {
+        if (!respostaId) throw new Error('ID da resposta é obrigatório.');
+        if (!novoTexto || typeof novoTexto !== 'string') throw new Error('Texto da resposta é obrigatório.');
+        const textoLimpo = novoTexto.trim();
+        if (textoLimpo.length < 3) throw new Error('A resposta deve ter no mínimo 3 caracteres.');
+        if (textoLimpo.length > 2000) throw new Error('A resposta não pode ter mais de 2000 caracteres.');
+        const res = await fetch(`${this.url}/rest/v1/respostas_feedback?id=eq.${respostaId}&select=sugestao_reporte_id`, { method: 'GET', headers: this.headers });
+        if (!res.ok) throw new Error('Erro ao buscar resposta.');
+        const arr = await res.json();
+        if (!Array.isArray(arr) || arr.length === 0) throw new Error('Resposta não encontrada.');
+        const respostaAtual = arr[0];
+        const response = await fetch(`${this.url}/rest/v1/respostas_feedback?id=eq.${respostaId}`, {
+            method: 'PATCH',
+            headers: this.headers,
+            body: JSON.stringify({ texto: textoLimpo })
+        });
+        if (!response.ok) {
+            const erroTexto = await response.text();
+            let erro;
+            try {
+                erro = JSON.parse(erroTexto);
+            } catch (e) {
+                erro = { message: erroTexto || 'Erro ao editar resposta.' };
+            }
+            throw new Error(erro.message || 'Erro ao editar resposta.');
+        }
+        this._invalidarCacheGetPorPrefixo([`${this.url}/rest/v1/respostas_feedback`]);
+        const sugestaoReporte = await this._buscarJsonGet(`${this.url}/rest/v1/sugestoes_reportes?id=eq.${respostaAtual.sugestao_reporte_id}&select=usuario_id,titulo,tipo`, { ttlMs: 5000 });
+        if (sugestaoReporte && sugestaoReporte.length > 0) {
+            const item = sugestaoReporte[0];
+            await this.criarNotificacaoRespostaFeedback(item.usuario_id, remetenteId, respostaAtual.sugestao_reporte_id, respostaId, item.titulo, item.tipo, true);
+        }
+        return true;
+    }
+
+    async excluirRespostaFeedback(respostaId) {
+        if (!respostaId) throw new Error('ID da resposta é obrigatório.');
+        const response = await fetch(`${this.url}/rest/v1/respostas_feedback?id=eq.${respostaId}`, {
+            method: 'DELETE',
+            headers: this.headers
+        });
+        if (!response.ok) {
+            const erroTexto = await response.text();
+            throw new Error(erroTexto || 'Erro ao excluir resposta.');
+        }
+        this._invalidarCacheGetPorPrefixo([`${this.url}/rest/v1/respostas_feedback`]);
+        return true;
+    }
+
+    async criarNotificacaoRespostaFeedback(destinatarioId, remetenteId, sugestaoReporteId, respostaId, titulo, tipoFeedback, ehEdicao) {
+        const body = {
+            destinatario_id: destinatarioId,
+            remetente_id: remetenteId,
+            avaliacao_id: null,
+            resposta_id: null,
+            sugestao_reporte_id: sugestaoReporteId,
+            resposta_feedback_id: respostaId,
+            feedback_tag: null,
+            feedback_tag_anterior: null,
+            feedback_titulo: titulo || '',
+            feedback_tipo: tipoFeedback || 'sugestao',
+            tipo: ehEdicao ? 'feedback_resposta_editada' : 'feedback_resposta',
+            lida: false
+        };
+        const response = await fetch(`${this.url}/rest/v1/notificacoes`, { method: 'POST', headers: this.headers, body: JSON.stringify(body) });
+        if (!response.ok) {
+            const t = await response.text();
+            console.error('Erro ao criar notificação de resposta de feedback:', t);
+            return null;
+        }
+        return true;
     }
 }
 

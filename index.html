@@ -102,6 +102,7 @@
                 <div class="header-left">
                     <button id="btnMenuMobile" class="btn-menu-mobile">
                         <i class="fas fa-bars"></i>
+                        <span id="badgeTotalNotificacoesMenu" class="badge-total-notificacoes-menu" style="display: none;"></span>
                     </button>
                     <h1><i class="fas fa-gamepad"></i> PlayShelf</h1>
                 </div>
@@ -110,7 +111,7 @@
                         <i class="fas fa-clipboard-list"></i>
                         <span id="badgeNovaAtualizacao" class="badge-nova-atualizacao" style="display: none;"></span>
                     </button>
-                    <button id="btnNotificacoes" class="btn-header btn-notificacoes" data-tooltip="Respostas em suas avaliações. Toque em uma notificação para ir ao jogo.">
+                    <button id="btnNotificacoes" class="btn-header btn-notificacoes" data-tooltip="Avisos sobre <span class='tooltip-destaque'>respostas nas suas avaliações</span>, feedback da equipe e outras interações. Clique em uma notificação para ver os detalhes.">
                         <i class="fas fa-bell"></i>
                         <span id="badgeNotificacoes" class="badge-notificacoes" style="display: none;"></span>
                     </button>
@@ -221,7 +222,7 @@
                     <span>Atualizações</span>
                     <span id="badgeNovaAtualizacaoMenu" class="badge-nova-atualizacao-menu" style="display: none;"></span>
                 </button>
-                <button class="menu-item-mobile" id="menuItemNotificacoes" data-tooltip="Respostas nas suas avaliações.">
+                <button class="menu-item-mobile" id="menuItemNotificacoes" data-tooltip="Avisos sobre respostas nas suas avaliações, feedback da equipe e outras interações.">
                     <i class="fas fa-bell"></i>
                     <span>Notificações</span>
                     <span id="badgeNotificacoesMenu" class="badge-notificacoes-menu" style="display: none;"></span>
@@ -369,7 +370,7 @@
                             </div>
                         </div>
                         <div class="card-relacionado">
-                            <h4><i class="fas fa-trophy"></i> Conquistas</h4>
+                            <h4><i class="fas fa-trophy"></i> Conquistas <span id="contadorConquistas" class="contador-conquistas" style="display: none;"></span></h4>
                             <div id="conquistasJogo" class="card-scrollavel">
                                 <p class="sem-informacao">Carregando...</p>
                             </div>
@@ -445,7 +446,7 @@
         <div class="modal-conteudo modal-notificacoes">
             <button class="btn-fechar-modal" id="btnFecharNotificacoes" aria-label="Fechar modal de notificações"><i class="fas fa-times"></i></button>
             <div class="notificacoes-header">
-                <h2><i class="fas fa-bell"></i> Notificações <span class="icone-tooltip" data-tooltip="Avisos quando alguém <span class='tooltip-destaque'>responde</span> sua avaliação ou sua resposta. Clique em um item para abrir o jogo."><i class="fas fa-info-circle"></i></span></h2>
+                <h2><i class="fas fa-bell"></i> Notificações <span class="icone-tooltip" data-tooltip="Avisos sobre <span class='tooltip-destaque'>respostas nas suas avaliações</span>, feedback da equipe sobre suas sugestões e reportes, e outras interações. Clique em um item para ver os detalhes."><i class="fas fa-info-circle"></i></span></h2>
                 <button id="btnMarcarTodasLidas" class="btn-marcar-lidas" data-tooltip="Marca todas as notificações como lidas e limpa a lista.">
                     <i class="fas fa-check-double"></i> Marcar todas como lidas
                 </button>
@@ -515,7 +516,7 @@
                         <option value="">Todas as tags</option>
                         <option value="sem_tag">Sem tag</option>
                         <option value="em_analise">Em análise</option>
-                        <option value="concluido">Concluído</option>
+                        <option value="concluido">Resolvido</option>
                         <option value="aplicado">Aplicado</option>
                         <option value="recusado">Recusado</option>
                     </select>

@@ -55,7 +55,7 @@ Aplicação web para organizar e gerenciar sua biblioteca pessoal de jogos de PC
 - Classificação de compatibilidade (Excelente, Boa, Média, Baixa) com cores visuais
 
 ### 🔔 Interface e Experiência
-- Sugerir melhorias ou reportar bugs: botão no header e no menu; envie sugestões ou reportes, com status (em análise, concluído, aplicado, recusado) e notificação quando o status mudar
+- Sugerir melhorias ou reportar bugs: botão no header e no menu; envie sugestões ou reportes, com status (em análise, resolvido, aplicado, recusado) e notificação quando o status mudar
 - Tooltips (dicas) em botões e campos para orientar o uso
 - Mais animações e fluidez na interface
 - Sistema de atualizações/changelog com exibição automática

@@ -86,6 +86,7 @@ const nomeUsuarioMenu = document.getElementById('nomeUsuarioMenu');
 const badgeNovaAtualizacaoMenu = document.getElementById('badgeNovaAtualizacaoMenu');
 const badgeNotificacoesMenu = document.getElementById('badgeNotificacoesMenu');
 const badgeSolicitacoesMenu = document.getElementById('badgeSolicitacoesMenu');
+const badgeTotalNotificacoesMenu = document.getElementById('badgeTotalNotificacoesMenu');
 const usuarioBadge = document.getElementById('usuarioBadge');
 const modalFotoPerfil = document.getElementById('modalFotoPerfil');
 const btnFecharFotoPerfil = document.getElementById('btnFecharFotoPerfil');
@@ -959,7 +960,7 @@ const ATUALIZACOES = [
             'Compatibilidade com amigos considera jogos da Steam',
             'Sugira melhorias ou reporte bugs: botão no header e no menu',
             'Envie sugestões ou reportes',
-            'Status das suas sugestões e reportes: em análise, concluído, aplicado, recusado',
+            'Status das suas sugestões e reportes: em análise, resolvido, aplicado, recusado',
             'Notificação quando o status da sua sugestão ou do seu reporte mudar',
             'Mais animações e fluidez na interface',
             'Dicas (tooltips) em botões e campos para te orientar'
@@ -1889,14 +1890,45 @@ async function buscarJogosDesenvolvedora(desenvolvedoraId, distribuidoraId, jogo
 
 async function buscarConquistasJogo(jogoId) {
     try {
-        const url = `${API_BASE}/games/${jogoId}/achievements?key=${API_KEY}`;
-        const resposta = await fetch(url);
-        if (resposta.status === 404) {
-            return null;
+        const todasConquistas = [];
+        let paginaAtual = 1;
+        let temMaisPaginas = true;
+        
+        while (temMaisPaginas) {
+            const url = `${API_BASE}/games/${jogoId}/achievements?key=${API_KEY}&page=${paginaAtual}&page_size=40`;
+            const resposta = await fetch(url);
+            
+            if (resposta.status === 404) {
+                return paginaAtual === 1 ? null : todasConquistas;
+            }
+            
+            if (!resposta.ok) {
+                throw new Error(`Erro HTTP: ${resposta.status}`);
+            }
+            
+            const dados = await resposta.json();
+            
+            if (dados.results && Array.isArray(dados.results)) {
+                todasConquistas.push(...dados.results);
+            }
+            
+            temMaisPaginas = dados.next !== null && dados.next !== undefined;
+            paginaAtual++;
+            
+            if (paginaAtual > 50) {
+                console.warn(`Limite de páginas atingido para conquistas do jogo ${jogoId}`);
+                break;
+            }
         }
-        const dados = await resposta.json();
-        cacheDetalhesRAWG.set(`rawg:achievements:${jogoId}`, { value: dados, timestamp: Date.now() });
-        return dados?.results || [];
+        
+        const resultadoCompleto = {
+            count: todasConquistas.length,
+            results: todasConquistas
+        };
+        
+        cacheDetalhesRAWG.set(`rawg:achievements:${jogoId}`, { value: resultadoCompleto, timestamp: Date.now() });
+        
+        return todasConquistas;
     } catch (erro) {
         console.error('Erro ao buscar conquistas:', erro);
         return null;
@@ -2082,6 +2114,93 @@ async function abrirDetalhesJogoSteam(jogo) {
     if (amigosComJogo) amigosComJogo.style.display = 'block';
 }
 
+async function atualizarDadosJogoNaLista(jogoId, dadosAtualizados) {
+    if (!usuarioLogado || !dadosAtualizados) return false;
+    
+    try {
+        const jogoNaLista = meusJogosCache.find(j => String(j.jogo_id) === String(jogoId));
+        if (!jogoNaLista) return false;
+        
+        const dadosParaAtualizar = {};
+        let precisaAtualizar = false;
+        
+        const normalizarString = (str) => {
+            if (!str) return null;
+            return String(str).trim() || null;
+        };
+        
+        const normalizarData = (data) => {
+            if (!data) return null;
+            return String(data).trim() || null;
+        };
+        
+        const nomeAtualizado = normalizarString(dadosAtualizados.name);
+        const nomeAtual = normalizarString(jogoNaLista.nome);
+        
+        if (nomeAtualizado && nomeAtualizado !== nomeAtual) {
+            dadosParaAtualizar.nome = nomeAtualizado;
+            precisaAtualizar = true;
+        }
+        
+        const imagemAtualizada = normalizarString(dadosAtualizados.background_image);
+        const imagemAtual = normalizarString(jogoNaLista.imagem);
+        
+        if (imagemAtualizada && imagemAtualizada !== imagemAtual) {
+            dadosParaAtualizar.imagem = imagemAtualizada;
+            precisaAtualizar = true;
+        }
+        
+        const lancamentoAtualizado = normalizarData(dadosAtualizados.released);
+        const lancamentoAtual = normalizarData(jogoNaLista.lancamento);
+        
+        if (lancamentoAtualizado !== lancamentoAtual) {
+            dadosParaAtualizar.lancamento = lancamentoAtualizado;
+            precisaAtualizar = true;
+        }
+        
+        if (!precisaAtualizar) return false;
+        
+        await supabase.atualizarJogo(jogoNaLista.id, dadosParaAtualizar);
+        
+        if (dadosParaAtualizar.nome !== undefined) {
+            jogoNaLista.nome = dadosParaAtualizar.nome;
+        }
+        if (dadosParaAtualizar.imagem !== undefined) {
+            jogoNaLista.imagem = dadosParaAtualizar.imagem;
+        }
+        if (dadosParaAtualizar.lancamento !== undefined) {
+            jogoNaLista.lancamento = dadosParaAtualizar.lancamento;
+        }
+        
+        if (!amigoVisualizando) {
+            jogosCache = meusJogosCache;
+        }
+        
+        await exibirMinhaLista();
+        
+        return true;
+    } catch (erro) {
+        console.error('Erro ao atualizar dados do jogo na lista:', erro);
+        return false;
+    }
+}
+
+async function atualizarDadosJogoSeNecessario(jogoId) {
+    if (!usuarioLogado) return;
+    
+    try {
+        const jogoNaLista = meusJogosCache.find(j => String(j.jogo_id) === String(jogoId));
+        if (!jogoNaLista) return;
+        
+        const detalhes = await buscarDetalhesJogo(jogoId);
+        if (detalhes) {
+            await atualizarDadosJogoNaLista(jogoId, detalhes);
+        }
+    } catch (erro) {
+        console.error('Erro ao atualizar dados do jogo:', erro);
+    }
+}
+
 async function abrirModalDetalhes(jogoId) {
     const contextoId = criarNovoContextoDetalhes();
     // Salvar posição do scroll antes de abrir detalhes
@@ -2194,6 +2313,7 @@ async function abrirModalDetalhes(jogoId) {
     const jogosSerie = document.getElementById('jogosSerie');
     const jogosDesenvolvedora = document.getElementById('jogosDesenvolvedora');
     const conquistasJogo = document.getElementById('conquistasJogo');
+    const contadorConquistas = document.getElementById('contadorConquistas');
     if (jogosSerie) {
         jogosSerie.innerHTML = gerarSkeletonGridHtml(2);
     }
@@ -2202,6 +2322,9 @@ async function abrirModalDetalhes(jogoId) {
     }
     if (conquistasJogo) {
         conquistasJogo.innerHTML = gerarSkeletonGridHtml(2);
+    }
+    if (contadorConquistas) {
+        contadorConquistas.style.display = 'none';
     }
     
     const jogoFromCache = (meusJogosCache || []).find(j => String(j.jogo_id) === String(jogoId))
@@ -2221,6 +2344,10 @@ async function abrirModalDetalhes(jogoId) {
     }
 
     if (detalhes) {
+        atualizarDadosJogoNaLista(jogoId, detalhes).catch(erro => {
+            console.error('Erro ao atualizar dados do jogo:', erro);
+        });
+        
         jogoDetalhesAtual = {
             id: jogoId,
             nome: detalhes.name,
@@ -2745,6 +2872,13 @@ function escapeHtml(texto) {
     const div = document.createElement('div');
     div.textContent = texto;
     return div.innerHTML;
+}
+
+function decodeHtmlEntities(texto) {
+    if (!texto) return '';
+    const textarea = document.createElement('textarea');
+    textarea.innerHTML = texto;
+    return textarea.value;
 }
 
 async function carregarScreenshots(jogoId, contextoId = null) {
@@ -3790,20 +3924,53 @@ async function carregarJogosRelacionados(detalhes, contextoId = null) {
     const desenvolvedoraId = detalhes.developers && detalhes.developers.length > 0 ? detalhes.developers[0].id : null;
     const distribuidoraId = detalhes.publishers && detalhes.publishers.length > 0 ? detalhes.publishers[0].id : null;
     
-    // Agrupar requisições independentes em paralelo usando Promise.allSettled
-    // Isso reduz o tempo total de carregamento de ~3x para ~1x (tempo da requisição mais lenta)
-    const [resultadoSerie, resultadoDesenvolvedora, resultadoConquistas] = await Promise.allSettled([
-        buscarJogosSerie(detalhes.id),
-        (desenvolvedoraId || distribuidoraId) ? buscarJogosDesenvolvedora(desenvolvedoraId, distribuidoraId, detalhes.id) : Promise.resolve(null),
-        buscarConquistasJogo(detalhes.id)
-    ]);
+    // Iniciar todas as requisições em paralelo, mas processar resultados assim que cada uma terminar
+    // Isso permite renderização progressiva - cada card aparece assim que seus dados estão prontos
+    const promessaSerie = buscarJogosSerie(detalhes.id).then(resultado => {
+        if (contextoId !== null && !isContextoDetalhesAtivo(contextoId)) return;
+        processarJogosSerie(resultado, jogosSerieContainer);
+    }).catch(erro => {
+        console.error('Erro ao carregar jogos da série:', erro);
+        if (contextoId === null || isContextoDetalhesAtivo(contextoId)) {
+            jogosSerieContainer.innerHTML = '<p class="sem-informacao">Erro ao carregar</p>';
+        }
+    });
     
-    if (contextoId !== null && !isContextoDetalhesAtivo(contextoId)) return;
+    const promessaDesenvolvedora = (desenvolvedoraId || distribuidoraId) 
+        ? buscarJogosDesenvolvedora(desenvolvedoraId, distribuidoraId, detalhes.id).then(resultado => {
+            if (contextoId !== null && !isContextoDetalhesAtivo(contextoId)) return;
+            processarJogosDesenvolvedora(resultado, jogosDesenvolvedoraContainer);
+        }).catch(erro => {
+            console.error('Erro ao carregar jogos da desenvolvedora:', erro);
+            if (contextoId === null || isContextoDetalhesAtivo(contextoId)) {
+                jogosDesenvolvedoraContainer.innerHTML = '<p class="sem-informacao">Erro ao carregar</p>';
+            }
+        })
+        : Promise.resolve(null).then(() => {
+            if (contextoId === null || isContextoDetalhesAtivo(contextoId)) {
+                jogosDesenvolvedoraContainer.innerHTML = '<p class="sem-informacao">Informação não disponível na API</p>';
+            }
+        });
     
-    // Processar resultados de jogos da série
-    const jogosSerie = resultadoSerie.status === 'fulfilled' ? resultadoSerie.value : null;
+    const promessaConquistas = buscarConquistasJogo(detalhes.id).then(resultado => {
+        if (contextoId !== null && !isContextoDetalhesAtivo(contextoId)) return;
+        processarConquistas(resultado, conquistasContainer);
+    }).catch(erro => {
+        console.error('Erro ao carregar conquistas:', erro);
+        if (contextoId === null || isContextoDetalhesAtivo(contextoId)) {
+            const contadorConquistas = document.getElementById('contadorConquistas');
+            if (contadorConquistas) contadorConquistas.style.display = 'none';
+            conquistasContainer.innerHTML = '<p class="sem-informacao">Erro ao carregar</p>';
+        }
+    });
+    
+    // Aguardar todas as requisições (mas cada uma já renderizou assim que terminou)
+    await Promise.allSettled([promessaSerie, promessaDesenvolvedora, promessaConquistas]);
+}
+
+function processarJogosSerie(jogosSerie, container) {
     if (jogosSerie && jogosSerie.length > 0) {
-        jogosSerieContainer.innerHTML = jogosSerie.map(jogo => {
+        container.innerHTML = jogosSerie.map(jogo => {
             const imgUrl = jogo.background_image || 'https://via.placeholder.com/150x200?text=Sem+Imagem';
             const adjustedUrl = ConnectionManager.adjustImageUrl(imgUrl, 'card');
             const loadingStrategy = ConnectionManager.getLoadingStrategy();
@@ -3816,13 +3983,13 @@ async function carregarJogosRelacionados(detalhes, contextoId = null) {
         `;
         }).join('');
     } else {
-        jogosSerieContainer.innerHTML = '<p class="sem-informacao">Informação não disponível na API</p>';
+        container.innerHTML = '<p class="sem-informacao">Informação não disponível na API</p>';
     }
-    
-    // Processar resultados de desenvolvedora/distribuidora
-    const jogosDesenvolvedora = resultadoDesenvolvedora.status === 'fulfilled' ? resultadoDesenvolvedora.value : null;
+}
+
+function processarJogosDesenvolvedora(jogosDesenvolvedora, container) {
     if (jogosDesenvolvedora && jogosDesenvolvedora.length > 0) {
-        jogosDesenvolvedoraContainer.innerHTML = jogosDesenvolvedora.map(jogo => {
+        container.innerHTML = jogosDesenvolvedora.map(jogo => {
             const imgUrl = jogo.background_image || 'https://via.placeholder.com/150x200?text=Sem+Imagem';
             const adjustedUrl = ConnectionManager.adjustImageUrl(imgUrl, 'card');
             const loadingStrategy = ConnectionManager.getLoadingStrategy();
@@ -3835,20 +4002,41 @@ async function carregarJogosRelacionados(detalhes, contextoId = null) {
             `;
         }).join('');
     } else {
-        jogosDesenvolvedoraContainer.innerHTML = '<p class="sem-informacao">Informação não disponível na API</p>';
+        container.innerHTML = '<p class="sem-informacao">Informação não disponível na API</p>';
+    }
+}
+
+async function processarConquistas(conquistas, container) {
+    const contadorConquistas = document.getElementById('contadorConquistas');
+    
+    if (conquistas === null) {
+        if (contadorConquistas) contadorConquistas.style.display = 'none';
+        container.innerHTML = '<p class="sem-informacao">Informação não disponível na API</p>';
+        return;
     }
     
-    // Processar resultados de conquistas
-    const conquistas = resultadoConquistas.status === 'fulfilled' ? resultadoConquistas.value : null;
-    if (conquistas === null) {
-        conquistasContainer.innerHTML = '<p class="sem-informacao">Informação não disponível na API</p>';
-    } else if (conquistas && conquistas.length > 0) {
-        // Agrupar todas as traduções em paralelo para reduzir tempo total
+    if (!conquistas || conquistas.length === 0) {
+        if (contadorConquistas) contadorConquistas.style.display = 'none';
+        container.innerHTML = '<p class="sem-informacao">Informação não disponível na API</p>';
+        return;
+    }
+    
+    // Atualizar contador imediatamente
+    if (contadorConquistas) {
+        contadorConquistas.textContent = conquistas.length;
+        contadorConquistas.style.display = 'inline';
+    }
+    
+    // Para muitas conquistas, renderizar em lotes para melhorar percepção de velocidade
+    const LOTE_INICIAL = 30;
+    const TAMANHO_LOTE = 50;
+    
+    if (conquistas.length <= LOTE_INICIAL) {
+        // Poucas conquistas: traduzir todas de uma vez
         const traducoesPromises = conquistas.map(async (conquista) => {
             const nomeOriginal = conquista.name || 'Conquista';
             const descricaoOriginal = conquista.description || '';
             
-            // Traduzir nome e descrição em paralelo (quando ambos existem)
             const [nomeTraduzido, descricaoTraduzida] = await Promise.all([
                 traduzirTexto(nomeOriginal),
                 descricaoOriginal ? traduzirTexto(descricaoOriginal) : Promise.resolve('')
@@ -3858,22 +4046,70 @@ async function carregarJogosRelacionados(detalhes, contextoId = null) {
         });
         
         const resultadosTraducao = await Promise.all(traducoesPromises);
-        
-        const conquistasHTML = resultadosTraducao.map(({ conquista, nomeTraduzido, descricaoTraduzida }) => {
-            return `
-                <div class="item-conquista">
-                    <img src="${conquista.image || 'https://via.placeholder.com/64x64?text=🏆'}" alt="${nomeTraduzido}" class="skeleton-img-loading" loading="lazy" decoding="async">
-                    <div class="conquista-info">
-                        <p class="conquista-nome">${nomeTraduzido}</p>
-                        ${descricaoTraduzida ? `<p class="conquista-descricao">${descricaoTraduzida}</p>` : ''}
-                    </div>
-                </div>
-            `;
-        });
-        conquistasContainer.innerHTML = conquistasHTML.join('');
+        const conquistasHTML = resultadosTraducao.map(criarHTMLConquista);
+        container.innerHTML = conquistasHTML.join('');
     } else {
-        conquistasContainer.innerHTML = '<p class="sem-informacao">Informação não disponível na API</p>';
+        // Muitas conquistas: renderizar lote inicial rapidamente, depois continuar em background
+        const conquistasIniciais = conquistas.slice(0, LOTE_INICIAL);
+        const conquistasRestantes = conquistas.slice(LOTE_INICIAL);
+        
+        // Renderizar lote inicial (pode usar nomes originais temporariamente ou traduzir rápido)
+        const traducoesIniciais = await Promise.all(conquistasIniciais.map(async (conquista) => {
+            const nomeOriginal = conquista.name || 'Conquista';
+            const descricaoOriginal = conquista.description || '';
+            
+            const [nomeTraduzido, descricaoTraduzida] = await Promise.all([
+                traduzirTexto(nomeOriginal),
+                descricaoOriginal ? traduzirTexto(descricaoOriginal) : Promise.resolve('')
+            ]);
+            
+            return { conquista, nomeTraduzido, descricaoTraduzida };
+        }));
+        
+        const htmlInicial = traducoesIniciais.map(criarHTMLConquista).join('');
+        container.innerHTML = htmlInicial;
+        
+        // Continuar carregando o resto em lotes menores em background
+        if (conquistasRestantes.length > 0) {
+            processarConquistasEmLotes(conquistasRestantes, container, TAMANHO_LOTE);
+        }
     }
+}
+
+async function processarConquistasEmLotes(conquistas, container, tamanhoLote) {
+    for (let i = 0; i < conquistas.length; i += tamanhoLote) {
+        const lote = conquistas.slice(i, i + tamanhoLote);
+        
+        const traducoesLote = await Promise.all(lote.map(async (conquista) => {
+            const nomeOriginal = conquista.name || 'Conquista';
+            const descricaoOriginal = conquista.description || '';
+            
+            const [nomeTraduzido, descricaoTraduzida] = await Promise.all([
+                traduzirTexto(nomeOriginal),
+                descricaoOriginal ? traduzirTexto(descricaoOriginal) : Promise.resolve('')
+            ]);
+            
+            return { conquista, nomeTraduzido, descricaoTraduzida };
+        }));
+        
+        const htmlLote = traducoesLote.map(criarHTMLConquista).join('');
+        container.insertAdjacentHTML('beforeend', htmlLote);
+        
+        // Pequena pausa para não bloquear a UI
+        await new Promise(resolve => setTimeout(resolve, 10));
+    }
+}
+
+function criarHTMLConquista({ conquista, nomeTraduzido, descricaoTraduzida }) {
+    return `
+        <div class="item-conquista">
+            <img src="${conquista.image || 'https://via.placeholder.com/64x64?text=🏆'}" alt="${nomeTraduzido}" class="skeleton-img-loading" loading="lazy" decoding="async">
+            <div class="conquista-info">
+                <p class="conquista-nome">${nomeTraduzido}</p>
+                ${descricaoTraduzida ? `<p class="conquista-descricao">${descricaoTraduzida}</p>` : ''}
+            </div>
+        </div>
+    `;
 }
 
 async function exibirAvaliacoes(avaliacoes) {
@@ -4447,6 +4683,9 @@ function abrirFormularioResposta(avaliacaoId) {
             // Criar notificação para o dono da avaliação
             await criarNotificacaoResposta(avaliacaoId, resposta.id, null);
             
+            // Atualizar badges imediatamente
+            await atualizarTodasBadgesNotificacoes();
+            
             mostrarNotificacao('Resposta enviada!', 'sucesso');
         } catch (erro) {
             console.error('Erro ao enviar resposta:', erro);
@@ -4570,6 +4809,9 @@ function abrirFormularioRespostaThread(respostaPaiId, avaliacaoId, autorResposta
             
             // Criar notificação para o dono da avaliação ou da resposta pai
             await criarNotificacaoResposta(avaliacaoId, resposta.id, respostaPaiId);
+            
+            // Atualizar badges imediatamente
+            await atualizarTodasBadgesNotificacoes();
             
             mostrarNotificacao('Resposta enviada!', 'sucesso');
         } catch (erro) {
@@ -5258,7 +5500,21 @@ async function exibirMinhaLista() {
         if (ConnectionManager.velocidade === 'fast' && !jogo.steam_appid) {
             card.addEventListener('mouseenter', () => {
                 prefetchDetalhesJogo(jogo.jogo_id);
+                atualizarDadosJogoSeNecessario(jogo.jogo_id).catch(() => {});
             }, { once: true, passive: true });
+        }
+        
+        const imgCard = card.querySelector('.jogo-imagem');
+        if (imgCard) {
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting && !jogo.steam_appid) {
+                        atualizarDadosJogoSeNecessario(jogo.jogo_id).catch(() => {});
+                        observer.unobserve(entry.target);
+                    }
+                });
+            }, { rootMargin: '50px' });
+            observer.observe(imgCard);
         }
         
         return card;
@@ -5514,17 +5770,15 @@ document.getElementById('formLoginCompleto').addEventListener('submit', async (e
         mostrarNotificacao(`Bem-vindo, ${usuario.usuario}!`, 'sucesso');
         atualizarInterfaceUsuario();
         atualizarBadgeFotoPerfil();
-        atualizarContadorSolicitacoes();
-        atualizarContadorNotificacoes();
-        atualizarBadgeSolicitacoes();
-        carregarContagemNaoLidasFeedback();
+        await atualizarTodasBadgesNotificacoes();
+        if (ehDono() && listaSugestoesReportes) {
+            anexarEventListenersFeedback();
+        }
         setTimeout(verificarNovasAtualizacoes, 500);
+        setTimeout(() => atualizarBadgeTotalNotificacoes(), 1000);
         setInterval(() => {
-            atualizarContadorSolicitacoes();
-            atualizarContadorNotificacoes();
-            atualizarBadgeSolicitacoes();
-            carregarContagemNaoLidasFeedback();
-        }, 30000);
+            atualizarTodasBadgesNotificacoes();
+        }, 5000);
         await exibirMinhaLista();
         
         document.getElementById('formLoginCompleto').reset();
@@ -5634,17 +5888,12 @@ inicializarDelegacaoDetalhes();
 if (usuarioLogado) {
     (async () => {
         atualizarBadgeFotoPerfil();
-        atualizarContadorSolicitacoes();
-        atualizarContadorNotificacoes();
-        atualizarBadgeSolicitacoes();
-        carregarContagemNaoLidasFeedback();
+        await atualizarTodasBadgesNotificacoes();
         setTimeout(verificarNovasAtualizacoes, 500);
+        setTimeout(() => atualizarBadgeTotalNotificacoes(), 1000);
         setInterval(() => {
-            atualizarContadorSolicitacoes();
-            atualizarContadorNotificacoes();
-            atualizarBadgeSolicitacoes();
-            carregarContagemNaoLidasFeedback();
-        }, 30000);
+            atualizarTodasBadgesNotificacoes();
+        }, 5000);
 
         // Verificar se estava visualizando lista de amigo
         const amigoSalvo = sessionStorage.getItem('amigoVisualizando');
@@ -5753,6 +6002,7 @@ function verificarNovasAtualizacoes() {
         if (badgeNovaAtualizacaoMenu) {
             badgeNovaAtualizacaoMenu.style.display = 'inline-flex';
         }
+        atualizarBadgeTotalNotificacoes();
         
         // Verificar se o modal já está aberto para evitar abrir duas vezes
         if (!modalAtualizacoes.classList.contains('ativo')) {
@@ -5768,6 +6018,8 @@ function verificarNovasAtualizacoes() {
                 }
             }, 800);
         }
+    } else {
+        atualizarBadgeTotalNotificacoes();
     }
 }
 
@@ -5868,6 +6120,7 @@ function abrirModalAtualizacoes() {
     if (badgeNovaAtualizacaoMenu) {
         badgeNovaAtualizacaoMenu.style.display = 'none';
     }
+    atualizarBadgeTotalNotificacoes();
 }
 
 function exibirAtualizacoes() {
@@ -6266,6 +6519,9 @@ function abrirModalFeedback() {
     }
     if (ehDono()) {
         carregarContagemNaoLidasFeedback();
+        if (listaSugestoesReportes) {
+            anexarEventListenersFeedback();
+        }
     }
     if (formFeedback) {
         formFeedback.reset();
@@ -6280,6 +6536,7 @@ async function carregarContagemNaoLidasFeedback() {
     if (!ehDono()) {
         if (badgeFeedback) badgeFeedback.style.display = 'none';
         if (badgeFeedbackMenu) badgeFeedbackMenu.style.display = 'none';
+        atualizarBadgeTotalNotificacoes();
         return;
     }
     try {
@@ -6296,10 +6553,12 @@ async function carregarContagemNaoLidasFeedback() {
             badgeFeedbackMenu.textContent = n > 9 ? '9+' : String(n);
             badgeFeedbackMenu.style.display = n > 0 ? 'inline-block' : 'none';
         }
+        atualizarBadgeTotalNotificacoes();
     } catch (e) {
         if (feedbackPainelBadge) { feedbackPainelBadge.textContent = '0'; feedbackPainelBadge.style.display = 'none'; }
         if (badgeFeedback) badgeFeedback.style.display = 'none';
         if (badgeFeedbackMenu) badgeFeedbackMenu.style.display = 'none';
+        atualizarBadgeTotalNotificacoes();
     }
 }
 
@@ -6333,8 +6592,9 @@ async function carregarListaFeedback() {
             listaSugestoesReportes.innerHTML = '<div class="sem-sugestoes-reportes"><i class="fas fa-inbox"></i><p>Nenhum item encontrado.</p></div>';
             return;
         }
-        const labelTag = (s) => ({ em_analise: 'Em análise', concluido: 'Concluído', aplicado: 'Aplicado', recusado: 'Recusado' }[s] || s);
-        listaSugestoesReportes.innerHTML = itens.map(item => {
+        const labelTag = (s) => ({ em_analise: 'Em análise', concluido: 'Resolvido', aplicado: 'Aplicado', recusado: 'Recusado' }[s] || s);
+        const htmlPromises = itens.map(async (item) => {
+            const respostas = await supabase.obterRespostasFeedback(item.id);
             const dataStr = formatarDataCompleta(item.created_at);
             const desc = escapeHtml(item.descricao || '');
             const tit = escapeHtml(item.titulo || '');
@@ -6343,6 +6603,41 @@ async function carregarListaFeedback() {
             const tagVal = item.tag || '';
             const selectClasse = 'feedback-select-tag' + (tagVal ? ' feedback-select-tag--' + tagVal : '');
             const pillHtml = tagVal ? `<span class="feedback-tag-pill feedback-tag-pill--${tagVal}">${labelTag(tagVal)}</span>` : '';
+            let respostasHtml = '';
+            const temResposta = respostas && respostas.length > 0;
+            if (temResposta) {
+                respostasHtml = '<div class="feedback-respostas-container">';
+                respostasHtml += respostas.map(resposta => {
+                    const dataRespostaStr = formatarDataCompleta(resposta.created_at);
+                    const textoResposta = escapeHtml(resposta.texto || '');
+                    const textoOriginal = (resposta.texto || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+                    const editado = resposta.updated_at && resposta.updated_at !== resposta.created_at;
+                    const editadoHtml = editado ? '<span class="feedback-resposta-editado">(editado)</span>' : '';
+                    return `<div class="feedback-resposta" data-resposta-id="${resposta.id}">
+                        <div class="feedback-resposta-header">
+                            <span class="feedback-resposta-autor">Equipe</span>
+                            <span class="feedback-resposta-data">${dataRespostaStr} ${editadoHtml}</span>
+                        </div>
+                        <div class="feedback-resposta-texto">${textoResposta}</div>
+                        <div class="feedback-resposta-acoes">
+                            <button type="button" class="btn-feedback-resposta-editar" data-resposta-id="${resposta.id}" data-texto="${textoOriginal}">Editar</button>
+                            <button type="button" class="btn-feedback-resposta-excluir" data-resposta-id="${resposta.id}">Excluir</button>
+                        </div>
+                        <div class="feedback-form-editar-resposta" data-resposta-id="${resposta.id}" style="display: none;">
+                            <textarea class="feedback-editar-resposta-textarea" placeholder="Digite sua resposta..." maxlength="2000">${textoOriginal}</textarea>
+                            <div class="feedback-resposta-contador"><span class="feedback-resposta-contador-num">${resposta.texto ? resposta.texto.length : 0}</span>/2000</div>
+                            <div class="feedback-resposta-botoes">
+                                <button type="button" class="btn-feedback-editar-resposta-salvar" data-resposta-id="${resposta.id}">Salvar</button>
+                                <button type="button" class="btn-feedback-editar-resposta-cancelar" data-resposta-id="${resposta.id}">Cancelar</button>
+                            </div>
+                        </div>
+                    </div>`;
+                }).join('');
+                respostasHtml += '</div>';
+            }
+            const botaoResponderHtml = temResposta 
+                ? '<button type="button" class="btn-feedback-responder" data-id="' + item.id + '" style="display: none;" disabled>Responder</button>'
+                : '<button type="button" class="btn-feedback-responder" data-id="' + item.id + '">Responder</button>';
             return `<div class="feedback-item${lidoClasse}" data-id="${item.id}">
                 <div class="feedback-item-header">
                     <span class="feedback-item-tipo ${item.tipo}">${item.tipo === 'bug' ? 'Bug' : 'Sugestão'}</span>
@@ -6351,22 +6646,37 @@ async function carregarListaFeedback() {
                 </div>
                 <div class="feedback-item-meta">${autor} · ${dataStr}</div>
                 ${desc ? `<div class="feedback-item-descricao">${desc}</div>` : ''}
+                ${respostasHtml}
                 <div class="feedback-item-tag-row">
                     <label class="feedback-item-tag-label">Status:</label>
                     <select class="${selectClasse}" data-id="${item.id}" aria-label="Alterar status da sugestão ou reporte">
                         <option value=""${tagVal === '' ? ' selected' : ''}>— Nenhuma —</option>
                         <option value="em_analise"${tagVal === 'em_analise' ? ' selected' : ''}>Em análise</option>
-                        <option value="concluido"${tagVal === 'concluido' ? ' selected' : ''}>Concluído</option>
+                        <option value="concluido"${tagVal === 'concluido' ? ' selected' : ''}>Resolvido</option>
                         <option value="aplicado"${tagVal === 'aplicado' ? ' selected' : ''}>Aplicado</option>
                         <option value="recusado"${tagVal === 'recusado' ? ' selected' : ''}>Recusado</option>
                     </select>
                 </div>
                 <div class="feedback-item-acoes">
+                    ${botaoResponderHtml}
                     <button type="button" class="btn-feedback-lido" data-id="${item.id}" data-lido="${item.lido}">${item.lido ? 'Marcar como não lido' : 'Marcar como lido'}</button>
                     <button type="button" class="btn-feedback-excluir" data-id="${item.id}">Excluir</button>
                 </div>
+                ${!temResposta ? `<div class="feedback-form-resposta" data-id="${item.id}" style="display: none;">
+                    <textarea class="feedback-resposta-textarea" placeholder="Digite sua resposta..." maxlength="2000"></textarea>
+                    <div class="feedback-resposta-contador"><span class="feedback-resposta-contador-num">0</span>/2000</div>
+                    <div class="feedback-resposta-botoes">
+                        <button type="button" class="btn-feedback-resposta-enviar" data-id="${item.id}">Enviar</button>
+                        <button type="button" class="btn-feedback-resposta-cancelar" data-id="${item.id}">Cancelar</button>
+                    </div>
+                </div>` : ''}
             </div>`;
-        }).join('');
+        });
+        const htmlArray = await Promise.all(htmlPromises);
+        listaSugestoesReportes.innerHTML = htmlArray.join('');
+        if (ehDono()) {
+            anexarEventListenersFeedback();
+        }
     } catch (e) {
         listaSugestoesReportes.innerHTML = '<div class="sem-sugestoes-reportes"><i class="fas fa-exclamation-triangle"></i><p>Erro ao carregar. Tente novamente.</p></div>';
     }
@@ -6451,6 +6761,9 @@ if (feedbackTabs) {
         if (tabName === 'painel') {
             feedbackAbaEnviar.style.display = 'none';
             feedbackAbaPainel.style.display = 'flex';
+            if (ehDono()) {
+                anexarEventListenersFeedback();
+            }
             carregarListaFeedback();
             carregarContadoresSugestoesBugs();
         } else {
@@ -6497,10 +6810,33 @@ if (btnFeedbackMarcarTodasLidas) {
         }
     });
 }
-if (listaSugestoesReportes) {
-    listaSugestoesReportes.addEventListener('click', async (e) => {
+let feedbackClickHandler = null;
+let feedbackChangeHandler = null;
+let feedbackInputHandler = null;
+
+function anexarEventListenersFeedback() {
+    if (!listaSugestoesReportes || !ehDono()) return;
+    
+    if (feedbackClickHandler) {
+        listaSugestoesReportes.removeEventListener('click', feedbackClickHandler);
+    }
+    if (feedbackChangeHandler) {
+        listaSugestoesReportes.removeEventListener('change', feedbackChangeHandler);
+    }
+    if (feedbackInputHandler) {
+        listaSugestoesReportes.removeEventListener('input', feedbackInputHandler);
+    }
+    
+    feedbackClickHandler = async (e) => {
         const btnLido = e.target.closest('.btn-feedback-lido');
         const btnExcluir = e.target.closest('.btn-feedback-excluir');
+        const btnResponder = e.target.closest('.btn-feedback-responder');
+        const btnRespostaEnviar = e.target.closest('.btn-feedback-resposta-enviar');
+        const btnRespostaCancelar = e.target.closest('.btn-feedback-resposta-cancelar');
+        const btnRespostaEditar = e.target.closest('.btn-feedback-resposta-editar');
+        const btnRespostaExcluir = e.target.closest('.btn-feedback-resposta-excluir');
+        const btnEditarRespostaSalvar = e.target.closest('.btn-feedback-editar-resposta-salvar');
+        const btnEditarRespostaCancelar = e.target.closest('.btn-feedback-editar-resposta-cancelar');
         if (btnLido) {
             const id = btnLido.dataset.id;
             const lidoAtual = btnLido.dataset.lido === 'true';
@@ -6527,9 +6863,167 @@ if (listaSugestoesReportes) {
                     mostrarNotificacao(erro.message || 'Erro ao excluir.', 'erro');
                 }
             });
+            return;
         }
-    });
-    listaSugestoesReportes.addEventListener('change', async (e) => {
+        if (btnResponder) {
+            const id = btnResponder.dataset.id;
+            if (!id) {
+                console.error('ID não encontrado no botão responder');
+                return;
+            }
+            const formResposta = listaSugestoesReportes.querySelector(`.feedback-form-resposta[data-id="${id}"]`);
+            if (!formResposta) {
+                console.error(`Formulário de resposta não encontrado para ID: ${id}`);
+                mostrarNotificacao('Erro ao abrir formulário de resposta.', 'erro');
+                return;
+            }
+            const estaVisivel = formResposta.style.display !== 'none';
+            formResposta.style.display = estaVisivel ? 'none' : 'block';
+            if (formResposta.style.display === 'block') {
+                const textarea = formResposta.querySelector('.feedback-resposta-textarea');
+                if (textarea) {
+                    textarea.value = '';
+                    textarea.focus();
+                    const contador = formResposta.querySelector('.feedback-resposta-contador-num');
+                    if (contador) contador.textContent = '0';
+                }
+            }
+            return;
+        }
+        if (btnRespostaEnviar) {
+            const id = btnRespostaEnviar.dataset.id;
+            const formResposta = listaSugestoesReportes.querySelector(`.feedback-form-resposta[data-id="${id}"]`);
+            if (!formResposta) return;
+            const textarea = formResposta.querySelector('.feedback-resposta-textarea');
+            if (!textarea) return;
+            const texto = (textarea.value || '').trim();
+            if (texto.length < 3) {
+                mostrarNotificacao('A resposta deve ter no mínimo 3 caracteres.', 'erro');
+                return;
+            }
+            const itemElement = listaSugestoesReportes.querySelector(`.feedback-item[data-id="${id}"]`);
+            const jaTemResposta = itemElement && itemElement.querySelector('.feedback-respostas-container');
+            if (jaTemResposta) {
+                mostrarNotificacao('Já existe uma resposta para este item. Exclua a resposta existente antes de criar uma nova.', 'erro');
+                return;
+            }
+            btnRespostaEnviar.disabled = true;
+            try {
+                await supabase.criarRespostaFeedback(id, texto, usuarioLogado.id);
+                mostrarNotificacao('Resposta enviada com sucesso! O autor será notificado.', 'sucesso');
+                carregarListaFeedback();
+                await atualizarTodasBadgesNotificacoes();
+            } catch (erro) {
+                if (erro.message && erro.message.includes('já existe') || erro.message.includes('already exists') || erro.message.includes('unique')) {
+                    mostrarNotificacao('Já existe uma resposta para este item. Exclua a resposta existente antes de criar uma nova.', 'erro');
+                } else {
+                    mostrarNotificacao(erro.message || 'Erro ao enviar resposta.', 'erro');
+                }
+            } finally {
+                btnRespostaEnviar.disabled = false;
+            }
+            return;
+        }
+        if (btnRespostaCancelar) {
+            const id = btnRespostaCancelar.dataset.id;
+            const formResposta = listaSugestoesReportes.querySelector(`.feedback-form-resposta[data-id="${id}"]`);
+            if (formResposta) {
+                const textarea = formResposta.querySelector('.feedback-resposta-textarea');
+                if (textarea) textarea.value = '';
+                const contador = formResposta.querySelector('.feedback-resposta-contador-num');
+                if (contador) contador.textContent = '0';
+                formResposta.style.display = 'none';
+            }
+            return;
+        }
+        if (btnRespostaEditar) {
+            const respostaId = btnRespostaEditar.dataset.respostaId;
+            const textoOriginal = btnRespostaEditar.dataset.texto || '';
+            const respostaEl = listaSugestoesReportes.querySelector(`.feedback-resposta[data-resposta-id="${respostaId}"]`);
+            const formEditar = listaSugestoesReportes.querySelector(`.feedback-form-editar-resposta[data-resposta-id="${respostaId}"]`);
+            if (!respostaEl || !formEditar) {
+                console.error('Elemento de resposta ou formulário de edição não encontrado');
+                return;
+            }
+            const respostaTexto = respostaEl.querySelector('.feedback-resposta-texto');
+            const respostaAcoes = respostaEl.querySelector('.feedback-resposta-acoes');
+            if (respostaTexto) respostaTexto.style.display = 'none';
+            if (respostaAcoes) respostaAcoes.style.display = 'none';
+            formEditar.style.display = 'block';
+            const textarea = formEditar.querySelector('.feedback-editar-resposta-textarea');
+            const contador = formEditar.querySelector('.feedback-resposta-contador-num');
+            if (textarea) {
+                textarea.value = decodeHtmlEntities(textoOriginal);
+                if (contador) contador.textContent = String(decodeHtmlEntities(textoOriginal).length);
+                textarea.focus();
+                textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+            }
+            return;
+        }
+        if (btnRespostaExcluir) {
+            const respostaId = btnRespostaExcluir.dataset.respostaId;
+            if (!respostaId) {
+                console.error('ID da resposta não encontrado');
+                mostrarNotificacao('Erro ao identificar resposta para exclusão.', 'erro');
+                return;
+            }
+            mostrarConfirmacao('Excluir Resposta', 'Excluir esta resposta? Essa ação não pode ser desfeita. Você poderá criar uma nova resposta após a exclusão.', async () => {
+                try {
+                    await supabase.excluirRespostaFeedback(respostaId);
+                    mostrarNotificacao('Resposta excluída com sucesso. Você pode criar uma nova resposta agora.', 'sucesso');
+                    carregarListaFeedback();
+                    await atualizarTodasBadgesNotificacoes();
+                } catch (erro) {
+                    console.error('Erro ao excluir resposta:', erro);
+                    mostrarNotificacao(erro.message || 'Erro ao excluir resposta.', 'erro');
+                }
+            });
+            return;
+        }
+        if (btnEditarRespostaSalvar) {
+            const respostaId = btnEditarRespostaSalvar.dataset.respostaId;
+            const formEditar = listaSugestoesReportes.querySelector(`.feedback-form-editar-resposta[data-resposta-id="${respostaId}"]`);
+            if (!formEditar) return;
+            const textarea = formEditar.querySelector('.feedback-editar-resposta-textarea');
+            if (!textarea) return;
+            const texto = (textarea.value || '').trim();
+            if (texto.length < 3) {
+                mostrarNotificacao('A resposta deve ter no mínimo 3 caracteres.', 'erro');
+                return;
+            }
+            btnEditarRespostaSalvar.disabled = true;
+            try {
+                await supabase.editarRespostaFeedback(respostaId, texto, usuarioLogado.id);
+                mostrarNotificacao('Resposta editada com sucesso! O autor será notificado.', 'sucesso');
+                carregarListaFeedback();
+                await atualizarTodasBadgesNotificacoes();
+            } catch (erro) {
+                mostrarNotificacao(erro.message || 'Erro ao editar resposta.', 'erro');
+            } finally {
+                btnEditarRespostaSalvar.disabled = false;
+            }
+            return;
+        }
+        if (btnEditarRespostaCancelar) {
+            const respostaId = btnEditarRespostaCancelar.dataset.respostaId;
+            const formEditar = listaSugestoesReportes.querySelector(`.feedback-form-editar-resposta[data-resposta-id="${respostaId}"]`);
+            const respostaEl = listaSugestoesReportes.querySelector(`.feedback-resposta[data-resposta-id="${respostaId}"]`);
+            if (!formEditar || !respostaEl) {
+                console.error('Formulário de edição ou elemento de resposta não encontrado ao cancelar');
+                return;
+            }
+            formEditar.style.display = 'none';
+            const respostaTexto = respostaEl.querySelector('.feedback-resposta-texto');
+            const respostaAcoes = respostaEl.querySelector('.feedback-resposta-acoes');
+            if (respostaTexto) respostaTexto.style.display = 'block';
+            if (respostaAcoes) respostaAcoes.style.display = 'block';
+            return;
+        }
+    };
+    
+    listaSugestoesReportes.addEventListener('click', feedbackClickHandler);
+    
+    feedbackChangeHandler = async (e) => {
         const sel = e.target.closest('.feedback-select-tag');
         if (!sel || !usuarioLogado) return;
         const id = sel.dataset.id;
@@ -6542,7 +7036,23 @@ if (listaSugestoesReportes) {
         } catch (erro) {
             mostrarNotificacao(erro.message || 'Erro ao atualizar status.', 'erro');
         }
-    });
+    };
+    
+    listaSugestoesReportes.addEventListener('change', feedbackChangeHandler);
+    
+    feedbackInputHandler = (e) => {
+        const textarea = e.target.closest('.feedback-resposta-textarea, .feedback-editar-resposta-textarea');
+        if (!textarea) return;
+        const contador = textarea.closest('.feedback-form-resposta, .feedback-form-editar-resposta')?.querySelector('.feedback-resposta-contador-num');
+        if (contador) {
+            contador.textContent = String(textarea.value.length);
+        }
+    };
+    
+    listaSugestoesReportes.addEventListener('input', feedbackInputHandler);
+}
+if (listaSugestoesReportes && ehDono()) {
+    anexarEventListenersFeedback();
 }
 
 if (btnSteam) {
@@ -6800,8 +7310,7 @@ async function carregarSolicitacoes() {
     try {
         const solicitacoes = await supabase.obterSolicitacoesPendentes(usuarioLogado.id);
         exibirSolicitacoes(solicitacoes);
-        atualizarContadorSolicitacoes();
-        atualizarBadgeSolicitacoes();
+        await atualizarTodasBadgesNotificacoes();
     } catch (erro) {
         console.error('Erro ao carregar solicitações:', erro);
         listaSolicitacoes.innerHTML = '<p style="color: var(--cor-texto-secundario);">Erro ao carregar solicitações.</p>';
@@ -6845,6 +7354,7 @@ function exibirSolicitacoes(solicitacoes) {
                 await supabase.aceitarSolicitacao(btn.dataset.solicitacaoId);
                 mostrarNotificacao('Amigo adicionado!', 'sucesso');
                 carregarSolicitacoes();
+                await atualizarTodasBadgesNotificacoes();
             } catch (erro) {
                 mostrarNotificacao('Erro ao aceitar solicitação.', 'erro');
             }
@@ -6857,6 +7367,7 @@ function exibirSolicitacoes(solicitacoes) {
                 await supabase.recusarSolicitacao(btn.dataset.solicitacaoId);
                 mostrarNotificacao('Solicitação recusada.', 'sucesso');
                 carregarSolicitacoes();
+                await atualizarTodasBadgesNotificacoes();
             } catch (erro) {
                 mostrarNotificacao('Erro ao recusar solicitação.', 'erro');
             }
@@ -6881,6 +7392,7 @@ async function atualizarBadgeSolicitacoes() {
         if (badgeSolicitacoesMenu) {
             badgeSolicitacoesMenu.style.display = 'none';
         }
+        atualizarBadgeTotalNotificacoes();
         return;
     }
     
@@ -6901,12 +7413,14 @@ async function atualizarBadgeSolicitacoes() {
                 badgeSolicitacoesMenu.style.display = 'none';
             }
         }
+        atualizarBadgeTotalNotificacoes();
     } catch (erro) {
         console.error('Erro ao atualizar badge de solicitações:', erro);
         badgeSolicitacoes.style.display = 'none';
         if (badgeSolicitacoesMenu) {
             badgeSolicitacoesMenu.style.display = 'none';
         }
+        atualizarBadgeTotalNotificacoes();
     }
 }
 
@@ -8017,6 +8531,35 @@ function compararEstatisticas(minhas, amigo) {
     };
 }
 
+function formatarNumeroConciso(valor, isDecimal = false) {
+    if (valor === null || valor === undefined || isNaN(valor)) {
+        return '-';
+    }
+    
+    if (!isDecimal) {
+        return Math.round(valor).toLocaleString('pt-BR');
+    }
+    
+    const valorAbs = Math.abs(valor);
+    
+    if (valorAbs === 0) {
+        return '0';
+    }
+    
+    if (valorAbs < 1) {
+        const formatado = valor.toFixed(1);
+        return formatado.replace(/\.0$/, '');
+    }
+    
+    if (valorAbs < 1000) {
+        const formatado = Math.round(valor * 10) / 10;
+        const strFormatado = formatado.toFixed(1);
+        return strFormatado.replace(/\.0$/, '');
+    }
+    
+    return Math.round(valor).toLocaleString('pt-BR');
+}
+
 function criarCardComparacao(label, meuValor, valorAmigo, icone, cor, isDecimal = false) {
     const diferenca = meuValor - valorAmigo;
     const diferencaAbs = Math.abs(diferenca);
@@ -8024,10 +8567,11 @@ function criarCardComparacao(label, meuValor, valorAmigo, icone, cor, isDecimal 
     const isIgual = diferenca === 0;
     
     const formatarValor = (valor) => {
-        if (isDecimal) {
-            return valor > 0 ? valor.toFixed(1) : '-';
-        }
-        return valor || 0;
+        return formatarNumeroConciso(valor, isDecimal);
+    };
+    
+    const formatarDiferenca = (diff) => {
+        return formatarNumeroConciso(diff, isDecimal);
     };
     
     return `
@@ -8052,7 +8596,7 @@ function criarCardComparacao(label, meuValor, valorAmigo, icone, cor, isDecimal 
             ${!isIgual ? `
                 <div class="comparacao-metrica-diferenca ${isMaior ? 'positiva' : 'negativa'}">
                     <i class="fas fa-${isMaior ? 'arrow-up' : 'arrow-down'}"></i>
-                    ${diferencaAbs} ${isDecimal ? '' : 'jogo' + (diferencaAbs !== 1 ? 's' : '')} ${isMaior ? 'a mais' : 'a menos'}
+                    ${formatarDiferenca(diferencaAbs)} ${isDecimal ? '' : 'jogo' + (diferencaAbs !== 1 ? 's' : '')} ${isMaior ? 'a mais' : 'a menos'}
                 </div>
             ` : ''}
         </div>
@@ -8379,11 +8923,19 @@ modalAtualizacoes.addEventListener('click', (e) => {
 btnNotificacoes.addEventListener('click', abrirModalNotificacoes);
 
 btnFecharNotificacoes.addEventListener('click', () => {
+    if (intervaloNotificacoesModal) {
+        clearInterval(intervaloNotificacoesModal);
+        intervaloNotificacoesModal = null;
+    }
     fecharModalComAnimacao(modalNotificacoes);
 });
 
 modalNotificacoes.addEventListener('click', (e) => {
     if (e.target === modalNotificacoes) {
+        if (intervaloNotificacoesModal) {
+            clearInterval(intervaloNotificacoesModal);
+            intervaloNotificacoesModal = null;
+        }
         fecharModalComAnimacao(modalNotificacoes);
     }
 });
@@ -8391,7 +8943,9 @@ modalNotificacoes.addEventListener('click', (e) => {
 btnMarcarTodasLidas.addEventListener('click', async () => {
     try {
         await supabase.marcarTodasNotificacoesComoLidas(usuarioLogado.id);
-        await atualizarContadorNotificacoes();
+        
+        // Atualizar todas as badges imediatamente
+        await atualizarTodasBadgesNotificacoes();
         
         // Remover todas as notificações da lista
         listaNotificacoes.innerHTML = `
@@ -8461,9 +9015,29 @@ async function criarNotificacaoResposta(avaliacaoId, respostaId, respostaPaiId =
     }
 }
 
+let intervaloNotificacoesModal = null;
+
 async function abrirModalNotificacoes() {
-    await carregarNotificacoes();
     modalNotificacoes.classList.add('ativo');
+    
+    listaNotificacoes.innerHTML = gerarSkeletonGridHtml(4);
+    
+    carregarNotificacoes();
+    
+    if (intervaloNotificacoesModal) {
+        clearInterval(intervaloNotificacoesModal);
+    }
+    intervaloNotificacoesModal = setInterval(async () => {
+        if (modalNotificacoes.classList.contains('ativo') && usuarioLogado) {
+            await atualizarNotificacoesSuave();
+            await atualizarTodasBadgesNotificacoes();
+        } else {
+            if (intervaloNotificacoesModal) {
+                clearInterval(intervaloNotificacoesModal);
+                intervaloNotificacoesModal = null;
+            }
+        }
+    }, 5000);
 }
 
 async function carregarNotificacoes() {
@@ -8478,7 +9052,6 @@ async function carregarNotificacoes() {
     }
     
     try {
-        listaNotificacoes.innerHTML = gerarSkeletonGridHtml(4);
         const notificacoes = await supabase.obterNotificacoes(usuarioLogado.id);
         const notificacoesNaoLidas = notificacoes.filter(n => !n.lida);
         exibirNotificacoes(notificacoesNaoLidas);
@@ -8493,6 +9066,37 @@ async function carregarNotificacoes() {
     }
 }
 
+async function atualizarNotificacoesSuave() {
+    if (!usuarioLogado || !modalNotificacoes.classList.contains('ativo')) {
+        return;
+    }
+    
+    try {
+        const notificacoes = await supabase.obterNotificacoes(usuarioLogado.id);
+        const notificacoesNaoLidas = notificacoes.filter(n => !n.lida);
+        
+        const notificacoesAtuais = Array.from(listaNotificacoes.querySelectorAll('.notificacao-item')).map(item => item.dataset.notificacaoId);
+        const novasNotificacoesIds = notificacoesNaoLidas.map(n => n.id.toString());
+        
+        const temMudancas = notificacoesAtuais.length !== novasNotificacoesIds.length || 
+                           notificacoesAtuais.some(id => !novasNotificacoesIds.includes(id)) ||
+                           novasNotificacoesIds.some(id => !notificacoesAtuais.includes(id));
+        
+        if (temMudancas) {
+            listaNotificacoes.classList.add('atualizando');
+            
+            requestAnimationFrame(() => {
+                setTimeout(() => {
+                    exibirNotificacoes(notificacoesNaoLidas);
+                    listaNotificacoes.classList.remove('atualizando');
+                }, 200);
+            });
+        }
+    } catch (erro) {
+        console.error('Erro ao atualizar notificações:', erro);
+    }
+}
+
 function exibirNotificacoes(notificacoes) {
     if (!notificacoes || notificacoes.length === 0) {
         listaNotificacoes.innerHTML = `
@@ -8504,10 +9108,10 @@ function exibirNotificacoes(notificacoes) {
         return;
     }
     
-    const labelTagFeedback = (s) => ({ em_analise: 'Em análise', concluido: 'Concluído', aplicado: 'Aplicado', recusado: 'Recusado' }[s] || s);
+    const labelTagFeedback = (s) => ({ em_analise: 'Em análise', concluido: 'Resolvido', aplicado: 'Aplicado', recusado: 'Recusado' }[s] || s);
     
     listaNotificacoes.innerHTML = notificacoes.map(notif => {
-        const isFeedback = notif.tipo === 'feedback_tag';
+        const isFeedback = notif.tipo === 'feedback_tag' || notif.tipo === 'feedback_resposta' || notif.tipo === 'feedback_resposta_editada';
         const remetenteNomeEscaped = escapeHtml(notif.remetente_nome);
         const remetenteFotoEscaped = notif.remetente_foto ? escapeHtml(notif.remetente_foto) : '';
         let avatarHTML;
@@ -8518,13 +9122,27 @@ function exibirNotificacoes(notificacoes) {
             avatarHTML = '<div class="notificacao-avatar-placeholder notificacao-avatar-equipe"><i class="fas fa-lightbulb"></i></div>';
             const tipoSR = notif.feedback_tipo === 'bug' ? 'reporte' : 'sugestão';
             const tit = escapeHtml(notif.feedback_titulo || '');
-            const tagLabel = labelTagFeedback(notif.feedback_tag);
-            const tagSlug = (notif.feedback_tag || '').replace(/[^a-z_]/g, '') || 'em_analise';
-            const pillHtml = `<span class="notificacao-tag-pill notificacao-tag-pill--${tagSlug}">${tagLabel}</span>`;
-            if (notif.feedback_tag_anterior) {
-                textoNotificacao = `O status da sua <strong>${tipoSR}</strong> «${tit}» foi atualizado para ${pillHtml}`;
+            if (notif.tipo === 'feedback_resposta') {
+                textoNotificacao = `A equipe respondeu sua <strong>${tipoSR}</strong>`;
+                const tituloLine = tit ? `<div class="notificacao-feedback-titulo"><i class="fas fa-tag"></i> ${tit}</div>` : '';
+                const textoRespostaFeedback = notif.resposta_texto ? (notif.resposta_texto.length > 150 ? escapeHtml(notif.resposta_texto.substring(0, 150)) + '...' : escapeHtml(notif.resposta_texto)) : '';
+                comentarioLine = (tituloLine || '') + (textoRespostaFeedback ? `<div class="notificacao-comentario">"${textoRespostaFeedback}"</div>` : '');
+            } else if (notif.tipo === 'feedback_resposta_editada') {
+                textoNotificacao = `A equipe editou a resposta da sua <strong>${tipoSR}</strong>`;
+                const tituloLine = tit ? `<div class="notificacao-feedback-titulo"><i class="fas fa-tag"></i> ${tit}</div>` : '';
+                const textoRespostaFeedback = notif.resposta_texto ? (notif.resposta_texto.length > 150 ? escapeHtml(notif.resposta_texto.substring(0, 150)) + '...' : escapeHtml(notif.resposta_texto)) : '';
+                comentarioLine = (tituloLine || '') + (textoRespostaFeedback ? `<div class="notificacao-comentario">"${textoRespostaFeedback}"</div>` : '');
             } else {
-                textoNotificacao = `Sua <strong>${tipoSR}</strong> «${tit}» foi marcada como ${pillHtml} pela equipe`;
+                const tagLabel = labelTagFeedback(notif.feedback_tag);
+                const tagSlug = (notif.feedback_tag || '').replace(/[^a-z_]/g, '') || 'em_analise';
+                const pillHtml = `<span class="notificacao-tag-pill notificacao-tag-pill--${tagSlug}">${tagLabel}</span>`;
+                const tituloLine = tit ? `<div class="notificacao-feedback-titulo"><i class="fas fa-tag"></i> ${tit}</div>` : '';
+                if (notif.feedback_tag_anterior) {
+                    textoNotificacao = `O status da sua <strong>${tipoSR}</strong> foi atualizado para ${pillHtml}`;
+                } else {
+                    textoNotificacao = `Sua <strong>${tipoSR}</strong> foi marcada como ${pillHtml} pela equipe`;
+                }
+                comentarioLine = tituloLine;
             }
         } else {
             avatarHTML = notif.remetente_foto 
@@ -8539,9 +9157,10 @@ function exibirNotificacoes(notificacoes) {
             jogoLine = `<p class="notificacao-jogo"><i class="fas fa-gamepad"></i> ${escapeHtml(notif.jogo_nome || 'Jogo')}</p>`;
             comentarioLine = textoResposta ? `<div class="notificacao-comentario">"${textoResposta}"</div>` : '';
         }
-        const dataAttrs = isFeedback ? `data-notificacao-id="${notif.id}" data-jogo-id="" data-feedback="1"` : `data-notificacao-id="${notif.id}" data-jogo-id="${notif.jogo_id || ''}"`;
+        const dataAttrs = isFeedback ? `data-notificacao-id="${notif.id}" data-jogo-id="" data-feedback="1" data-sugestao-reporte-id="${notif.sugestao_reporte_id || ''}"` : `data-notificacao-id="${notif.id}" data-jogo-id="${notif.jogo_id || ''}"`;
+        const classeFeedback = isFeedback ? 'notificacao-feedback' : '';
         return `
-            <div class="notificacao-item ${!notif.lida ? 'nao-lida' : ''}" ${dataAttrs}>
+            <div class="notificacao-item ${!notif.lida ? 'nao-lida' : ''} ${classeFeedback}" ${dataAttrs}>
                 ${!notif.lida ? '<span class="notificacao-badge-nova">NOVA</span>' : ''}
                 <div class="notificacao-item-header">
                     ${avatarHTML}
@@ -8557,8 +9176,8 @@ function exibirNotificacoes(notificacoes) {
         `;
     }).join('');
     
-    // Adicionar event listeners para clicar na notificação
-    document.querySelectorAll('.notificacao-item').forEach(item => {
+    // Adicionar event listeners para clicar na notificação (apenas para notificações de respostas)
+    document.querySelectorAll('.notificacao-item:not(.notificacao-feedback)').forEach(item => {
         item.addEventListener('click', async (e) => {
             // Não executar se clicou no botão de marcar como lida
             if (e.target.closest('.btn-marcar-lida')) {
@@ -8568,9 +9187,11 @@ function exibirNotificacoes(notificacoes) {
             const notificacaoId = item.dataset.notificacaoId;
             const jogoId = parseInt(item.dataset.jogoId);
             
-            // Marcar como lida
+            // Marcar como lida e navegar para o jogo
             await supabase.marcarNotificacaoComoLida(notificacaoId);
-            await atualizarContadorNotificacoes();
+            
+            // Atualizar todas as badges imediatamente
+            await atualizarTodasBadgesNotificacoes();
             
             // Remover a notificação da lista
             item.remove();
@@ -8587,11 +9208,14 @@ function exibirNotificacoes(notificacoes) {
             }
             
             // Fechar modal
+            if (intervaloNotificacoesModal) {
+                clearInterval(intervaloNotificacoesModal);
+                intervaloNotificacoesModal = null;
+            }
             fecharModalComAnimacao(modalNotificacoes);
             
-            if (item.dataset.feedback === '1') {
-                abrirModalFeedback();
-            } else if (jogoId && !isNaN(jogoId)) {
+            // Navegar para o jogo se tiver jogoId
+            if (jogoId && !isNaN(jogoId)) {
                 abrirModalDetalhes(jogoId);
             }
         });
@@ -8606,7 +9230,9 @@ function exibirNotificacoes(notificacoes) {
             
             try {
                 await supabase.marcarNotificacaoComoLida(notificacaoId);
-                await atualizarContadorNotificacoes();
+                
+                // Atualizar todas as badges imediatamente
+                await atualizarTodasBadgesNotificacoes();
                 
                 // Remover a notificação da lista
                 notificacaoItem.remove();
@@ -8635,6 +9261,7 @@ async function atualizarContadorNotificacoes() {
         if (badgeNotificacoesMenu) {
             badgeNotificacoesMenu.style.display = 'none';
         }
+        atualizarBadgeTotalNotificacoes();
         return;
     }
     
@@ -8654,12 +9281,88 @@ async function atualizarContadorNotificacoes() {
                 badgeNotificacoesMenu.style.display = 'none';
             }
         }
+        atualizarBadgeTotalNotificacoes();
     } catch (erro) {
         console.error('Erro ao atualizar contador de notificações:', erro);
         badgeNotificacoes.style.display = 'none';
         if (badgeNotificacoesMenu) {
             badgeNotificacoesMenu.style.display = 'none';
         }
+        atualizarBadgeTotalNotificacoes();
+    }
+}
+
+async function atualizarTodasBadgesNotificacoes() {
+    if (!usuarioLogado) {
+        badgeNotificacoes.style.display = 'none';
+        badgeSolicitacoes.style.display = 'none';
+        if (badgeNotificacoesMenu) badgeNotificacoesMenu.style.display = 'none';
+        if (badgeSolicitacoesMenu) badgeSolicitacoesMenu.style.display = 'none';
+        if (badgeFeedback) badgeFeedback.style.display = 'none';
+        if (badgeFeedbackMenu) badgeFeedbackMenu.style.display = 'none';
+        atualizarBadgeTotalNotificacoes();
+        return;
+    }
+
+    try {
+        await Promise.all([
+            atualizarContadorNotificacoes(),
+            atualizarBadgeSolicitacoes(),
+            carregarContagemNaoLidasFeedback()
+        ]);
+    } catch (erro) {
+        console.error('Erro ao atualizar todas as badges:', erro);
+    }
+}
+
+async function atualizarBadgeTotalNotificacoes() {
+    if (!badgeTotalNotificacoesMenu || !usuarioLogado) {
+        if (badgeTotalNotificacoesMenu) {
+            badgeTotalNotificacoesMenu.style.display = 'none';
+        }
+        return;
+    }
+
+    try {
+        let total = 0;
+
+        const temNovaAtualizacao = badgeNovaAtualizacao && badgeNovaAtualizacao.style.display !== 'none';
+        if (temNovaAtualizacao) {
+            total += 1;
+        }
+
+        try {
+            const countNotificacoes = await supabase.contarNotificacoesNaoLidas(usuarioLogado.id);
+            total += countNotificacoes || 0;
+        } catch (e) {
+            console.error('Erro ao contar notificações:', e);
+        }
+
+        try {
+            const countSolicitacoes = await supabase.obterSolicitacoesPendentes(usuarioLogado.id);
+            total += countSolicitacoes ? countSolicitacoes.length : 0;
+        } catch (e) {
+            console.error('Erro ao contar solicitações:', e);
+        }
+
+        if (ehDono()) {
+            try {
+                const countFeedback = await supabase.contarSugestoesReportesNaoLidas();
+                total += countFeedback || 0;
+            } catch (e) {
+                console.error('Erro ao contar feedback:', e);
+            }
+        }
+
+        if (total > 0) {
+            badgeTotalNotificacoesMenu.textContent = total > 99 ? '99+' : total.toString();
+            badgeTotalNotificacoesMenu.style.display = 'inline-flex';
+        } else {
+            badgeTotalNotificacoesMenu.style.display = 'none';
+        }
+    } catch (erro) {
+        console.error('Erro ao atualizar badge total de notificações:', erro);
+        badgeTotalNotificacoesMenu.style.display = 'none';
     }
 }
 

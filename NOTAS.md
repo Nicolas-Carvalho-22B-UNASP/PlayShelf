@@ -12,7 +12,7 @@
 - ✅ Compatibilidade com amigos considera jogos da Steam
 - ✅ Sugira melhorias ou reporte bugs: botão no header e no menu
 - ✅ Envie sugestões ou reportes
-- ✅ Status das suas sugestões e reportes: em análise, concluído, aplicado, recusado
+- ✅ Status das suas sugestões e reportes: em análise, resolvido, aplicado, recusado
 - ✅ Notificação quando o status da sua sugestão ou do seu reporte mudar
 - ✅ Mais animações e fluidez na interface
 - ✅ Dicas (tooltips) em botões e campos para te orientar
