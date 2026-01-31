@@ -36,7 +36,7 @@ Aplicação web para organizar e gerenciar sua biblioteca pessoal de jogos de PC
 - Sistema de likes/dislikes em avaliações e respostas
 - Foto de perfil personalizável
 - Sistema de fotos de jogos da comunidade
-- Upload de múltiplas fotos por jogo (até 5 por postagem)
+- Upload de múltiplas fotos por jogo (até 5 por postagem, máx. 10MB cada)
 - Carrossel de fotos com navegação e indicadores
 - Descrição opcional para fotos (até 200 caracteres)
 - Likes/dislikes em fotos da comunidade

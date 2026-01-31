@@ -3269,7 +3269,7 @@ async function carregarFotosJogo(jogoId, contextoId = null, forcarAtualizacao = 
             btnPostarFoto.onclick = () => abrirModalFotoJogo(jogoId);
         }
         
-        const fotosComLikes = await supabase.obterFotosJogoComLikes(jogoId, usuarioLogado.id, { forcarAtualizacao });
+        const fotosComLikes = await supabase.obterFotosJogoOtimizado(jogoId, usuarioLogado.id, { forcarAtualizacao });
         if (contextoId !== null && !isContextoDetalhesAtivo(contextoId)) return;
         
         if (fotosComLikes.length === 0) {
@@ -3665,8 +3665,65 @@ function inicializarCarrosselFotos() {
     });
 }
 
+async function comprimirImagem(arquivo, qualidade = 0.8, maxLargura = 1920, maxAltura = 1920) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        img.onload = () => {
+            let largura = img.width;
+            let altura = img.height;
+            
+            if (largura > maxLargura || altura > maxAltura) {
+                const ratio = Math.min(maxLargura / largura, maxAltura / altura);
+                largura = Math.round(largura * ratio);
+                altura = Math.round(altura * ratio);
+            }
+            
+            canvas.width = largura;
+            canvas.height = altura;
+            
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(0, 0, largura, altura);
+            ctx.drawImage(img, 0, 0, largura, altura);
+            
+            canvas.toBlob(
+                (blob) => {
+                    if (blob) {
+                        resolve(blob);
+                    } else {
+                        canvas.toBlob(
+                            (jpgBlob) => {
+                                if (jpgBlob) {
+                                    resolve(jpgBlob);
+                                } else {
+                                    reject(new Error('Erro ao comprimir imagem'));
+                                }
+                            },
+                            'image/jpeg',
+                            qualidade
+                        );
+                    }
+                },
+                'image/webp',
+                qualidade
+            );
+        };
+        
+        img.onerror = () => reject(new Error('Erro ao carregar imagem'));
+        
+        if (arquivo instanceof Blob) {
+            img.src = URL.createObjectURL(arquivo);
+        } else {
+            img.src = arquivo;
+        }
+    });
+}
+
 let jogoIdFotoAtual = null;
 let fotosSelecionadas = [];
+let arquivosSelecionados = [];
 
 function abrirModalFotoJogo(jogoId) {
     if (!usuarioLogado) {
@@ -3687,6 +3744,7 @@ function abrirModalFotoJogo(jogoId) {
     
     jogoIdFotoAtual = jogoId;
     fotosSelecionadas = [];
+    arquivosSelecionados = [];
     atualizarPreviewFotos();
     descricaoFotoJogo.value = '';
     contadorDescricaoFoto.textContent = '0';
@@ -3699,11 +3757,12 @@ function fecharModalFotoJogo() {
     fecharModalComAnimacao(modalFotoJogo);
     inputFotoJogo.value = '';
     fotosSelecionadas = [];
+    arquivosSelecionados = [];
     jogoIdFotoAtual = null;
 }
 
 async function postarFotoJogo() {
-    if (!usuarioLogado || !jogoIdFotoAtual || fotosSelecionadas.length === 0) {
+    if (!usuarioLogado || !jogoIdFotoAtual || arquivosSelecionados.length === 0) {
         mostrarNotificacao('Selecione pelo menos uma foto primeiro', 'erro');
         return;
     }
@@ -3723,26 +3782,50 @@ async function postarFotoJogo() {
     
     try {
         btnConfirmarFotoJogo.disabled = true;
-        btnConfirmarFotoJogo.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Postando...';
+        const totalFotos = arquivosSelecionados.length;
         
         const nomeJogo = jogoNaMinhaLista.nome || 'Jogo';
         const descricao = descricaoFotoJogo.value.trim() || null;
         const jogoIdParaRecarregar = jogoIdFotoAtual;
         
-        const promessas = fotosSelecionadas.map((foto, i) => 
-            supabase.criarFotoJogo(
+        btnConfirmarFotoJogo.innerHTML = `<i class="fas fa-compress"></i> Comprimindo...`;
+        
+        const arquivosComprimidos = [];
+        for (let i = 0; i < arquivosSelecionados.length; i++) {
+            const arquivo = arquivosSelecionados[i];
+            try {
+                const comprimido = await comprimirImagem(arquivo, 0.85, 1920, 1920);
+                arquivosComprimidos.push(comprimido);
+            } catch (e) {
+                console.error('Erro ao comprimir, usando original:', e);
+                arquivosComprimidos.push(arquivo);
+            }
+        }
+        
+        btnConfirmarFotoJogo.innerHTML = `<i class="fas fa-upload"></i> Enviando 0/${totalFotos}...`;
+        
+        const urlsUpload = [];
+        for (let i = 0; i < arquivosComprimidos.length; i++) {
+            btnConfirmarFotoJogo.innerHTML = `<i class="fas fa-upload"></i> Enviando ${i + 1}/${totalFotos}...`;
+            const url = await supabase.uploadFotoStorage(arquivosComprimidos[i], usuarioLogado.id, jogoIdFotoAtual);
+            urlsUpload.push(url);
+        }
+        
+        btnConfirmarFotoJogo.innerHTML = `<i class="fas fa-save"></i> Salvando...`;
+        
+        for (let i = 0; i < urlsUpload.length; i++) {
+            await supabase.criarFotoJogoStorage(
                 usuarioLogado.id,
                 jogoIdFotoAtual,
                 nomeJogo,
-                foto,
+                urlsUpload[i],
                 i === 0 ? descricao : null
-            )
-        );
-        await Promise.all(promessas);
+            );
+        }
         
-        const mensagem = fotosSelecionadas.length === 1 
+        const mensagem = urlsUpload.length === 1 
             ? 'Foto publicada com sucesso!'
-            : `${fotosSelecionadas.length} fotos publicadas com sucesso!`;
+            : `${urlsUpload.length} fotos publicadas com sucesso!`;
         
         mostrarNotificacao(mensagem, 'sucesso');
         fecharModalFotoJogo();
@@ -3750,7 +3833,17 @@ async function postarFotoJogo() {
         await carregarFotosJogo(jogoIdParaRecarregar, null, true);
     } catch (erro) {
         console.error('Erro ao postar foto:', erro);
-        mostrarNotificacao(erro.message || 'Erro ao postar foto', 'erro');
+        let mensagemErro = 'Erro ao postar foto';
+        if (erro.message) {
+            if (erro.message.includes('security') || erro.message.includes('policy')) {
+                mensagemErro = 'Erro de permissão no servidor. Verifique as políticas do Storage.';
+            } else if (erro.message.includes('size') || erro.message.includes('large')) {
+                mensagemErro = 'Arquivo muito grande. Tente uma imagem menor.';
+            } else {
+                mensagemErro = erro.message;
+            }
+        }
+        mostrarNotificacao(mensagemErro, 'erro');
         btnConfirmarFotoJogo.disabled = false;
         btnConfirmarFotoJogo.innerHTML = '<i class="fas fa-check"></i> Postar';
     }
@@ -3821,6 +3914,8 @@ async function deletarFotoJogo(grupoId, fotoId, jogoId) {
     
     const card = listaFotosJogo.querySelector(`[data-grupo-id="${grupoId}"]`);
     const container = card?.querySelector('.foto-jogo-carrossel-container');
+    const imagemContainer = card?.querySelector('.foto-jogo-imagem-container');
+    const btnDeletar = card?.querySelector('.btn-deletar-foto-jogo');
     const temCarrossel = container !== null;
     const mensagem = temCarrossel 
         ? 'Tem certeza que deseja deletar esta postagem (todas as fotos)? Esta ação não pode ser desfeita.'
@@ -3831,20 +3926,38 @@ async function deletarFotoJogo(grupoId, fotoId, jogoId) {
         mensagem,
         async () => {
             try {
+                if (btnDeletar) {
+                    btnDeletar.disabled = true;
+                    btnDeletar.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+                }
+                if (card) {
+                    card.style.opacity = '0.5';
+                    card.style.pointerEvents = 'none';
+                }
+                
                 if (temCarrossel) {
                     const fotosData = JSON.parse(container.getAttribute('data-fotos'));
                     for (const foto of fotosData) {
-                        await supabase.deletarFotoJogo(foto.id, usuarioLogado.id);
+                        await supabase.deletarFotoJogoCompleto(foto.id, usuarioLogado.id, foto.foto);
                     }
                     mostrarNotificacao('Postagem deletada com sucesso!', 'sucesso');
                 } else {
-                    await supabase.deletarFotoJogo(fotoId, usuarioLogado.id);
+                    const fotoUrl = imagemContainer?.getAttribute('data-foto-url') || null;
+                    await supabase.deletarFotoJogoCompleto(fotoId, usuarioLogado.id, fotoUrl);
                     mostrarNotificacao('Foto deletada com sucesso!', 'sucesso');
                 }
                 await carregarFotosJogo(jogoId, null, true);
             } catch (erro) {
                 console.error('Erro ao deletar foto:', erro);
                 mostrarNotificacao('Erro ao deletar foto', 'erro');
+                if (btnDeletar) {
+                    btnDeletar.disabled = false;
+                    btnDeletar.innerHTML = '<i class="fas fa-trash"></i>';
+                }
+                if (card) {
+                    card.style.opacity = '1';
+                    card.style.pointerEvents = 'auto';
+                }
             }
         }
     );
@@ -4328,10 +4441,11 @@ function fecharConfirmacao() {
 }
 
 btnConfirmarAcao.addEventListener('click', async () => {
-    if (acaoConfirmacao) {
-        await acaoConfirmacao();
-    }
+    const acao = acaoConfirmacao;
     fecharConfirmacao();
+    if (acao) {
+        await acao();
+    }
 });
 
 btnCancelarAcao.addEventListener('click', fecharConfirmacao);
@@ -5686,11 +5800,12 @@ btnCarregarMais.addEventListener('click', () => {
 
 document.querySelectorAll('.filtro-btn').forEach(btn => {
     btn.addEventListener('click', () => {
+        if (btn.dataset.filtro === filtroAtual) return;
+        
         document.querySelectorAll('.filtro-btn').forEach(b => b.classList.remove('ativo'));
         btn.classList.add('ativo');
         filtroAtual = btn.dataset.filtro;
         
-        // Salvar filtro atual
         sessionStorage.setItem('filtroAtual', filtroAtual);
         
         exibirMinhaLista();
@@ -9438,12 +9553,13 @@ function atualizarPreviewFotos() {
             btn.addEventListener('click', (e) => {
                 const index = parseInt(btn.getAttribute('data-index'));
                 fotosSelecionadas.splice(index, 1);
+                arquivosSelecionados.splice(index, 1);
                 atualizarPreviewFotos();
             });
         });
     }
     
-    btnConfirmarFotoJogo.disabled = false;
+    btnConfirmarFotoJogo.disabled = arquivosSelecionados.length === 0;
 }
 
 if (inputFotoJogo) {
@@ -9453,12 +9569,13 @@ if (inputFotoJogo) {
         if (arquivos.length === 0) return;
         
         const LIMITE_FOTOS = 5;
-        const totalFotos = fotosSelecionadas.length + arquivos.length;
+        const LIMITE_MB = 10;
+        const totalFotos = arquivosSelecionados.length + arquivos.length;
         
         if (totalFotos > LIMITE_FOTOS) {
             const fotosExcedentes = totalFotos - LIMITE_FOTOS;
             mostrarNotificacao(
-                `Você pode selecionar no máximo ${LIMITE_FOTOS} fotos. Você já tem ${fotosSelecionadas.length} foto(s) selecionada(s) e tentou adicionar mais ${arquivos.length}. Remova ${fotosExcedentes} foto(s) antes de continuar.`,
+                `Você pode selecionar no máximo ${LIMITE_FOTOS} fotos. Você já tem ${arquivosSelecionados.length} foto(s) selecionada(s) e tentou adicionar mais ${arquivos.length}. Remova ${fotosExcedentes} foto(s) antes de continuar.`,
                 'erro'
             );
             inputFotoJogo.value = '';
@@ -9466,8 +9583,8 @@ if (inputFotoJogo) {
         }
         
         for (const arquivo of arquivos) {
-            if (arquivo.size > 5 * 1024 * 1024) {
-                mostrarNotificacao(`A imagem "${arquivo.name}" deve ter no máximo 5MB`, 'erro');
+            if (arquivo.size > LIMITE_MB * 1024 * 1024) {
+                mostrarNotificacao(`A imagem "${arquivo.name}" deve ter no máximo ${LIMITE_MB}MB`, 'erro');
                 inputFotoJogo.value = '';
                 return;
             }
@@ -9477,6 +9594,8 @@ if (inputFotoJogo) {
                 inputFotoJogo.value = '';
                 return;
             }
+            
+            arquivosSelecionados.push(arquivo);
             
             const reader = new FileReader();
             await new Promise((resolve, reject) => {

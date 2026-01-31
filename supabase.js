@@ -1703,6 +1703,160 @@ class SupabaseClient {
         return true;
     }
 
+    async uploadFotoStorage(arquivo, usuarioId, jogoId) {
+        const timestamp = Date.now();
+        const tipoArquivo = arquivo.type || 'image/jpeg';
+        const extensao = tipoArquivo === 'image/webp' ? 'webp' : tipoArquivo === 'image/png' ? 'png' : 'jpg';
+        const nomeArquivo = `${usuarioId}_${jogoId}_${timestamp}.${extensao}`;
+        
+        const response = await fetch(
+            `${this.url}/storage/v1/object/fotos-jogos/${nomeArquivo}`,
+            {
+                method: 'POST',
+                headers: {
+                    'apikey': this.key,
+                    'Authorization': `Bearer ${this.key}`,
+                    'Content-Type': tipoArquivo
+                },
+                body: arquivo
+            }
+        );
+
+        if (!response.ok) {
+            const erro = await response.text();
+            console.error('Erro upload storage:', erro, 'Status:', response.status);
+            console.error('URL tentada:', `${this.url}/storage/v1/object/fotos-jogos/${nomeArquivo}`);
+            throw new Error(`Erro ao fazer upload da foto: ${erro}`);
+        }
+
+        const urlPublica = `${this.url}/storage/v1/object/public/fotos-jogos/${nomeArquivo}`;
+        return urlPublica;
+    }
+
+    async deletarFotoStorage(fotoUrl) {
+        if (!fotoUrl || !fotoUrl.includes('/storage/v1/object/public/fotos-jogos/')) {
+            return true;
+        }
+        
+        const caminho = fotoUrl.split('/storage/v1/object/public/fotos-jogos/')[1];
+        if (!caminho) return true;
+
+        const response = await fetch(
+            `${this.url}/storage/v1/object/fotos-jogos/${caminho}`,
+            {
+                method: 'DELETE',
+                headers: {
+                    'apikey': this.key,
+                    'Authorization': `Bearer ${this.key}`
+                }
+            }
+        );
+
+        if (!response.ok) {
+            console.error('Erro ao deletar foto do storage');
+        }
+        return true;
+    }
+
+    async criarFotoJogoStorage(usuarioId, jogoId, nomeJogo, fotoUrl, descricao = null) {
+        const response = await fetch(`${this.url}/rest/v1/fotos_jogos`, {
+            method: 'POST',
+            headers: this.headers,
+            body: JSON.stringify({
+                usuario_id: usuarioId,
+                jogo_id: jogoId,
+                nome_jogo: nomeJogo,
+                foto: fotoUrl,
+                descricao: descricao
+            })
+        });
+
+        if (!response.ok) {
+            const erro = await response.json();
+            throw new Error(erro.message || 'Erro ao postar foto');
+        }
+
+        const dados = await response.json();
+        this._invalidarCacheGetPorPrefixo([
+            `${this.url}/rest/v1/fotos_jogos?jogo_id=eq.${jogoId}`,
+            `${this.url}/rest/v1/fotos_jogos`
+        ]);
+        return dados[0];
+    }
+
+    async deletarFotoJogoCompleto(fotoId, usuarioId, fotoUrl) {
+        await this.deletarFotoStorage(fotoUrl);
+        
+        const response = await fetch(
+            `${this.url}/rest/v1/fotos_jogos?id=eq.${fotoId}&usuario_id=eq.${usuarioId}`,
+            {
+                method: 'DELETE',
+                headers: this.headers
+            }
+        );
+
+        if (!response.ok) {
+            throw new Error('Erro ao deletar foto');
+        }
+
+        this._invalidarCacheGetPorPrefixo([
+            `${this.url}/rest/v1/fotos_jogos`,
+            `${this.url}/rest/v1/likes_dislikes?foto_id=eq.${fotoId}`
+        ]);
+        return true;
+    }
+
+    async obterFotosJogoOtimizado(jogoId, usuarioId, { forcarAtualizacao = false } = {}) {
+        const urlFotos = `${this.url}/rest/v1/fotos_jogos?jogo_id=eq.${jogoId}&select=id,usuario_id,jogo_id,nome_jogo,foto,descricao,created_at,usuarios(usuario,foto_perfil)&order=created_at.desc`;
+        if (forcarAtualizacao) this._cacheGet.delete(urlFotos);
+        
+        const fotos = await this._buscarJsonGet(urlFotos, { ttlMs: forcarAtualizacao ? 0 : 15000 });
+        
+        if (fotos.length === 0) {
+            return [];
+        }
+        
+        const fotoIds = fotos.map(f => f.id);
+        const urlLikes = `${this.url}/rest/v1/likes_dislikes?foto_id=in.(${fotoIds.join(',')})&select=foto_id,tipo,usuario_id`;
+        if (forcarAtualizacao) this._cacheGet.delete(urlLikes);
+        
+        const todosLikes = await this._buscarJsonGet(urlLikes, { ttlMs: forcarAtualizacao ? 0 : 15000 });
+        
+        const likesMap = new Map();
+        for (const like of todosLikes) {
+            if (!likesMap.has(like.foto_id)) {
+                likesMap.set(like.foto_id, { likes: 0, dislikes: 0, meuLike: null });
+            }
+            const dados = likesMap.get(like.foto_id);
+            if (like.tipo === 'like') {
+                dados.likes++;
+            } else if (like.tipo === 'dislike') {
+                dados.dislikes++;
+            }
+            if (like.usuario_id === usuarioId) {
+                dados.meuLike = like.tipo;
+            }
+        }
+        
+        return fotos.map(item => {
+            const likesData = likesMap.get(item.id) || { likes: 0, dislikes: 0, meuLike: null };
+            return {
+                id: item.id,
+                usuario_id: item.usuario_id,
+                jogo_id: item.jogo_id,
+                nome_jogo: item.nome_jogo,
+                foto: item.foto,
+                descricao: item.descricao,
+                created_at: item.created_at,
+                usuario_nome: item.usuarios?.usuario || 'Usuário desconhecido',
+                usuario_foto: item.usuarios?.foto_perfil || null,
+                contador_likes: likesData.likes,
+                contador_dislikes: likesData.dislikes,
+                meu_like: likesData.meuLike
+            };
+        });
+    }
+
     async criarSugestaoOuReporte(usuarioId, usuarioNome, { tipo, titulo, descricao }) {
         if (!tipo || !['sugestao', 'bug'].includes(tipo)) {
             throw new Error('Tipo inválido. Use "sugestao" ou "bug".');

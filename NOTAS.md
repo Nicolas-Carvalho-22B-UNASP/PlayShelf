@@ -149,7 +149,7 @@
 - [ ] **Sanitização completa de inputs** usando DOMPurify ou similar (substituir escapeHtml básico)
 - [ ] **Validação e sanitização de uploads de arquivos** (fotos de perfil e jogos)
   - [ ] Validação de tipo MIME real (não apenas extensão)
-  - [ ] Validação de tamanho máximo (2MB para perfil, 5MB para fotos de jogos)
+  - [ ] Validação de tamanho máximo (2MB para perfil, 10MB para fotos de jogos)
   - [ ] Scan de malware em uploads
   - [ ] Conversão automática de imagens para formatos seguros (WebP)
   - [ ] Remoção de metadados EXIF das imagens
